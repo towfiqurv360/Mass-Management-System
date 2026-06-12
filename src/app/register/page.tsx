@@ -1,143 +1,149 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { supabase } from "../lib/supabase";
+import Link from "next/link";
+import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
-export default function Register() {
+export default function RegisterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
 
+  // 📝 Complete Form States
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
   const [roomNumber, setRoomNumber] = useState("");
-  const [roomType, setRoomType] = useState("single");
+  const [roomCategory, setRoomCategory] = useState("Double");
+  const [bloodGroup, setBloodGroup] = useState("");
+  const [emergencyContact, setEmergencyContact] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password.length < 6) return toast.error("Password must be at least 6 characters.");
+    if (!bloodGroup) return toast.error("Please select your blood group.");
+
     setLoading(true);
-    setErrorMsg("");
+    const toastId = toast.loading("Securely creating your mess account...");
 
     try {
+      // Sending ALL requirement data via metadata to the SQL Trigger
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName,
+            phone: phone,
+            room_number: roomNumber,
+            room_category: roomCategory,
+            blood_group: bloodGroup,
+            emergency_contact: emergencyContact
+          }
+        }
       });
 
       if (error) throw error;
 
-      if (data.user) {
-        const { error: profileError } = await supabase.from("profiles").upsert({
-          id: data.user.id,
-          email: email,
-          full_name: fullName,
-          phone: phone,
-          room_number: roomNumber,
-          room_type: roomType,
-          role: "user",
-          balance: 0
-        });
-
-        if (profileError) throw profileError;
-      }
-
-      alert("Registration Successful! Please login to continue.");
+      toast.success("Registration Successful! Welcome aboard.", { id: toastId });
       router.push("/login");
+
     } catch (error: any) {
-      setErrorMsg(error.message);
+      toast.error(error.message || "Failed to create account.", { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0B1120] p-4 transition-colors">
-      <div className="w-full max-w-5xl bg-white dark:bg-[#0F172A] rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden flex flex-col md:flex-row">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0F172A] relative overflow-hidden py-12">
+      
+      {/* Background Glows */}
+      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-indigo-500/20 rounded-full filter blur-[100px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-purple-500/20 rounded-full filter blur-[100px] pointer-events-none"></div>
+
+      <div className="w-full max-w-xl bg-white/5 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl relative z-10">
         
-        {/* Left Side / Branding (Matches Login Page) */}
-        <div className="hidden md:flex md:w-5/12 bg-[#0F172A] relative overflow-hidden flex-col items-center justify-center p-12 text-center">
-          <div className="absolute inset-0 bg-gradient-to-tr from-indigo-900/40 to-purple-900/40 z-0"></div>
-          <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
-          <div className="relative z-10">
-            <div className="w-20 h-20 mx-auto bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-6">
-              <span className="font-black text-4xl text-white">M</span>
-            </div>
-            <h2 className="text-3xl font-black text-white tracking-tight mb-4">Join Mess Pro</h2>
-            <p className="text-gray-400 text-sm leading-relaxed max-w-sm mx-auto">
-              Register your account, select your room, and get access to the ultimate digital mess management system.
-            </p>
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-4 text-2xl font-black text-white">
+            M
           </div>
+          <h1 className="text-3xl font-black text-white tracking-tight">Border Registration</h1>
+          <p className="text-slate-400 text-sm font-semibold mt-2">Complete your profile to join the mess registry.</p>
         </div>
 
-        {/* Right Side Form */}
-        <div className="w-full md:w-7/12 p-8 md:p-12 flex flex-col justify-center">
-          <div className="md:hidden flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
-              <span className="text-white font-black text-xl">M</span>
-            </div>
-            <h2 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">Mess Pro</h2>
-          </div>
-
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Create Account</h3>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">Fill in your details to get started.</p>
+        <form onSubmit={handleRegister} className="space-y-5">
           
-          {errorMsg && (
-            <div className="bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 p-4 rounded-xl text-sm font-bold mb-6 border border-rose-200 dark:border-rose-500/20 flex items-center gap-2">
-              <svg className="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-              {errorMsg}
-            </div>
-          )}
-
-          <form onSubmit={handleRegister} className="space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Full Name</label>
-                <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1E293B] border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Phone Number</label>
-                <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1E293B] border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
-              </div>
-            </div>
-
+          {/* ROW 1: Name & Phone */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Email Address</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1E293B] border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Full Name</label>
+              <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-indigo-500 transition-all" placeholder="e.g. Md Towfiqur Rahman" />
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Room Number</label>
-                <input type="text" required placeholder="e.g. 204" value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1E293B] border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Room Type</label>
-                <select required value={roomType} onChange={(e) => setRoomType(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1E293B] border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer">
-                  <option value="single">Single Room</option>
-                  <option value="double">Double Room</option>
-                  <option value="triple">Triple Room</option>
-                </select>
-              </div>
-            </div>
-
             <div>
-              <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Password</label>
-              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1E293B] border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Phone Number</label>
+              <input type="tel" required value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-indigo-500 transition-all" placeholder="01XXXXXXXXX" />
             </div>
+          </div>
 
-            <button type="submit" disabled={loading} className="w-full bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 font-black uppercase tracking-wider py-4 rounded-xl transition-all shadow-lg mt-4 disabled:opacity-50">
-              {loading ? "Creating Account..." : "Sign Up Securely"}
-            </button>
-          </form>
+          {/* ROW 2: Room Number & Category */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Room Number</label>
+              <input type="text" required value={roomNumber} onChange={e => setRoomNumber(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-indigo-500 transition-all" placeholder="e.g. 201" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Room Category</label>
+              <select value={roomCategory} onChange={e => setRoomCategory(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer">
+                <option value="Single">Single Seat</option>
+                <option value="Double">Double Seat</option>
+                <option value="Triple">Triple Seat</option>
+                <option value="Quad">Quad (4) Seat</option>
+              </select>
+            </div>
+          </div>
 
-          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-8">
-            Already registered? <Link href="/login" className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Sign in here</Link>
-          </p>
-        </div>
+          {/* ROW 3: Blood Group & Emergency Contact */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Blood Group</label>
+              <select required value={bloodGroup} onChange={e => setBloodGroup(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer">
+                <option value="" disabled>Select Group</option>
+                <option value="A+">A+</option><option value="A-">A-</option>
+                <option value="B+">B+</option><option value="B-">B-</option>
+                <option value="O+">O+</option><option value="O-">O-</option>
+                <option value="AB+">AB+</option><option value="AB-">AB-</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Emergency Contact (Name & No)</label>
+              <input type="text" required value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-indigo-500 transition-all" placeholder="Father - 01XXXXXXXXX" />
+            </div>
+          </div>
+
+          {/* ROW 4: Security (Email & Password) */}
+          <div className="pt-4 border-t border-white/10 space-y-4">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Email Address</label>
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-purple-500 transition-all" placeholder="name@example.com" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Password</label>
+              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-3.5 bg-slate-900/50 text-white text-sm font-bold rounded-xl border border-white/10 outline-none focus:border-purple-500 transition-all" placeholder="••••••••" />
+            </div>
+          </div>
+
+          <button type="submit" disabled={loading} className="w-full py-4 mt-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-95 disabled:opacity-70 flex justify-center items-center gap-2">
+            {loading ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> : "Complete Registration"}
+          </button>
+        </form>
+
+        <p className="text-center text-xs font-semibold text-slate-400 mt-6">
+          Already a resident? <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-black">Sign In</Link>
+        </p>
+
       </div>
     </div>
   );

@@ -1,54 +1,121 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import toast from "react-hot-toast";
 
-export default function DepositsAndReceipts() {
+const getLocalToday = () => {
+  const today = new Date();
+  today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+  return today.toISOString().split("T")[0];
+};
+
+export default function DepositsPage() {
+  const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   
   const [userRole, setUserRole] = useState("user");
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState("");
+  
+  // Balances
+  const [myMealBalance, setMyMealBalance] = useState(0);
+  const [myMessBalance, setMyMessBalance] = useState(0);
+  const [myTotalMessDue, setMyTotalMessDue] = useState(0);
+  
+  // Data States
   const [deposits, setDeposits] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
 
-  // User Form States
+  // Form States
+  const [selectedMember, setSelectedMember] = useState("");
+  const [depositCategory, setDepositCategory] = useState("meal"); // 'meal' or 'mess'
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("bKash");
-  const [trxId, setTrxId] = useState("");
+  const [method, setMethod] = useState("Cash");
+  const [date, setDate] = useState(getLocalToday());
+
+  // Searchable Dropdown States
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchDeposits();
+    setIsMounted(true);
+    fetchDepositsData();
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const fetchDeposits = async () => {
+  // 🎯 THE FIX: Auto-fill Mess Amount based on WHO is selected
+  useEffect(() => {
+    if (depositCategory === "mess") {
+      if (userRole === "user") {
+        // Auto-fill for logged-in user
+        setAmount(myTotalMessDue > 0 ? myTotalMessDue.toString() : "");
+      } else if (selectedMember) {
+        // Auto-fill for ADMIN based on SELECTED MEMBER
+        const targetMember = members.find(m => m.id === selectedMember);
+        if (targetMember) {
+          const targetDue = Number(targetMember.current_month_rent || 0) + 
+                            Number(targetMember.current_month_maid || 0) + 
+                            Number(targetMember.current_month_wifi || 0) + 
+                            Number(targetMember.current_month_electricity || 0);
+          setAmount(targetDue > 0 ? targetDue.toString() : "");
+        } else {
+          setAmount("");
+        }
+      } else {
+        setAmount("");
+      }
+    } else if (depositCategory === "meal") {
+      setAmount(""); // Meal fund is always manual
+    }
+  }, [depositCategory, myTotalMessDue, userRole, selectedMember, members]);
+
+  const fetchDepositsData = async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setCurrentUserId(user.id);
 
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
       const role = profile?.role || "user";
       setUserRole(role);
-
-      // STRICT FILTER: Force this page to ONLY show meal deposits
-      let query = supabase.from("deposits")
-        .select(`*, profiles(full_name, room_number)`)
-        .eq("deposit_type", "meal")
-        .order("created_at", { ascending: false });
       
-      // If the user is NOT the Mill Manager (admin), show only their own meal deposits
-      if (role !== "admin") {
-        query = query.eq("user_id", user.id); 
+      setMyMealBalance(Number(profile?.balance || 0));
+      setMyMessBalance(Number(profile?.mess_balance || 0));
+
+      const rent = Number(profile?.current_month_rent || 0);
+      const maid = Number(profile?.current_month_maid || 0);
+      const wifi = Number(profile?.current_month_wifi || 0);
+      const electricity = Number(profile?.current_month_electricity || 0);
+      setMyTotalMessDue(rent + maid + wifi + electricity); 
+
+      if (role !== "user") {
+        // 🎯 Fetch ALL necessary billing fields for auto-filling any user's data
+        const { data: allMembers } = await supabase.from("profiles").select("id, full_name, room_number, current_month_rent, current_month_maid, current_month_wifi, current_month_electricity").order("full_name");
+        setMembers(allMembers || []);
+
+        const { data: allDeposits } = await supabase.from("deposits")
+          .select(`*, profiles(full_name, room_number)`)
+          .order("created_at", { ascending: false });
+        setDeposits(allDeposits || []);
+      } else {
+        const { data: myDeposits } = await supabase.from("deposits")
+          .select(`*, profiles(full_name, room_number)`)
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        setDeposits(myDeposits || []);
       }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setDeposits(data || []);
-
-    } catch (error: any) {
-      toast.error("Failed to synchronize ledger data.");
+    } catch (error) {
+      toast.error("Failed to sync deposit vault.");
     } finally {
       setLoading(false);
     }
@@ -56,196 +123,370 @@ export default function DepositsAndReceipts() {
 
   const handleSubmitDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUserId) return;
+    if (!amount || Number(amount) <= 0) return toast.error("Enter a valid amount.");
     
-    if (parseFloat(amount) < 50) return toast.error("Minimum deposit amount is ৳50");
-    if (!trxId.trim()) return toast.error("Transaction ID or Reference is required!");
+    const targetUserId = userRole === "user" ? currentUserId : selectedMember;
+    if (!targetUserId) return toast.error("Please search and select a resident first.");
 
-    const toastId = toast.loading("Submitting meal fund request...");
     setActionLoading(true);
+    const isRequest = userRole === "user";
+    const toastId = toast.loading(isRequest ? "Submitting deposit request..." : "Processing direct deposit...");
 
     try {
-      const { error } = await supabase.from("deposits").insert({
-        user_id: currentUserId,
-        amount: parseFloat(amount),
-        method,
-        transaction_id: trxId,
-        deposit_type: "meal", 
-        status: "pending"
+      const initialStatus = isRequest ? "pending" : "approved";
+
+      const { error: depositErr } = await supabase.from("deposits").insert({
+        user_id: targetUserId, amount: Number(amount), method: method, date: date, status: initialStatus, deposit_category: depositCategory
       });
+      if (depositErr) throw depositErr;
 
-      if (error) throw error;
+      if (!isRequest) {
+        const { data: userProfile } = await supabase.from("profiles").select("balance, mess_balance").eq("id", targetUserId).single();
+        if (depositCategory === "meal") {
+          await supabase.from("profiles").update({ balance: Number(userProfile?.balance || 0) + Number(amount) }).eq("id", targetUserId);
+        } else {
+          await supabase.from("profiles").update({ mess_balance: Number(userProfile?.mess_balance || 0) + Number(amount) }).eq("id", targetUserId);
+        }
+      }
+
+      toast.success(isRequest ? "Deposit request sent!" : `Added ৳${amount} to account!`, { id: toastId });
       
-      toast.success("Meal fund request submitted successfully!", { id: toastId });
-      setAmount("");
-      setTrxId("");
-      fetchDeposits();
-    } catch (error: any) {
-      toast.error(error.message, { id: toastId });
+      // Reset form
+      setAmount(""); 
+      if (userRole !== "user") {
+        setSearchTerm(""); 
+        setSelectedMember("");
+      }
+      setDepositCategory("meal");
+      
+      fetchDepositsData();
+    } catch (error) {
+      toast.error("Transaction failed.", { id: toastId });
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleApprove = async (dep: any) => {
-    const toastId = toast.loading("Approving meal deposit...");
+  const handleApproveRequest = async (depositId: string, targetUserId: string, reqAmount: number, reqCategory: string) => {
+    if (userRole === "user") return;
     setActionLoading(true);
-
+    const toastId = toast.loading("Approving request...");
     try {
-      const { error: depError } = await supabase.from("deposits").update({ status: "approved" }).eq("id", dep.id);
-      if (depError) throw depError;
+      const { data: userProfile } = await supabase.from("profiles").select("balance, mess_balance").eq("id", targetUserId).single();
+      if (reqCategory === "meal") {
+        await supabase.from("profiles").update({ balance: Number(userProfile?.balance || 0) + reqAmount }).eq("id", targetUserId);
+      } else {
+        await supabase.from("profiles").update({ mess_balance: Number(userProfile?.mess_balance || 0) + reqAmount }).eq("id", targetUserId);
+      }
+      await supabase.from("deposits").update({ status: "approved" }).eq("id", depositId);
+      toast.success("Request approved!", { id: toastId });
+      fetchDepositsData();
+    } catch (error) {
+      toast.error("Failed to approve.", { id: toastId });
+    } finally {
+      setActionLoading(false);
+    }
+   
+await supabase.from("notifications").insert({
+  user_id: targetUserId,
+  title: "Deposit Approved! ✅",
+  message: `Your deposit of ৳${reqAmount} for ${reqCategory === 'mess' ? 'Mess Rent' : 'Meal Fund'} has been approved and added to your balance.`,
+});
 
-      // Update User's Meal Balance directly
-      const { data: profile } = await supabase.from("profiles").select("balance").eq("id", dep.user_id).single();
-      const newBalance = Number(profile?.balance || 0) + Number(dep.amount);
-      await supabase.from("profiles").update({ balance: newBalance }).eq("id", dep.user_id);
 
-      toast.success("Meal fund approved and added to balance!", { id: toastId });
-      fetchDeposits();
-    } catch (error: any) {
-      toast.error("Approval failed: " + error.message, { id: toastId });
+const userEmail = userProfile.email; 
+if (userEmail) {
+  await fetch('/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: userEmail,
+      subject: 'Deposit Approved - Mess Management',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f8fafc; border-radius: 10px;">
+          <h2 style="color: #10b981;">Deposit Successful!</h2>
+          <p>Hello,</p>
+          <p>Your deposit of <strong>৳${reqAmount}</strong> for <strong>${reqCategory.toUpperCase()}</strong> has been verified by the manager.</p>
+          <p>Your updated balance is now live on your dashboard.</p>
+          <br/>
+          <p>Regards,<br/>Mess Management Team</p>
+        </div>
+      `
+    })
+  });
+}
+  };
+
+  const handleDeleteDeposit = async (depositId: string, targetUserId: string, depAmount: number, depCategory: string, depStatus: string) => {
+    if (userRole === "user") return;
+    if (!window.confirm("Reverse this transaction? Balance will be deducted if approved.")) return;
+
+    setActionLoading(true);
+    try {
+      if (depStatus === "approved") {
+        const { data: userProfile } = await supabase.from("profiles").select("balance, mess_balance").eq("id", targetUserId).single();
+        if (depCategory === "meal") {
+          await supabase.from("profiles").update({ balance: Number(userProfile?.balance || 0) - depAmount }).eq("id", targetUserId);
+        } else {
+          await supabase.from("profiles").update({ mess_balance: Number(userProfile?.mess_balance || 0) - depAmount }).eq("id", targetUserId);
+        }
+      }
+      await supabase.from("deposits").delete().eq("id", depositId);
+      toast.success("Transaction reversed.");
+      fetchDepositsData();
+    } catch (error) {
+      toast.error("Failed to reverse.");
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleReject = async (id: string) => {
-    if (!window.confirm("Reject this meal deposit request?")) return;
-    
-    const toastId = toast.loading("Rejecting transaction...");
-    try {
-      const { error } = await supabase.from("deposits").update({ status: "rejected" }).eq("id", id);
-      if (error) throw error;
-      
-      toast.success("Transaction rejected successfully.", { id: toastId });
-      fetchDeposits();
-    } catch (error: any) {
-      toast.error("Rejection failed.", { id: toastId });
-    }
-  };
+  if (!isMounted) return null;
 
-  const pendingCount = deposits.filter(d => d.status === 'pending').length;
-  const totalApproved = deposits.filter(d => d.status === 'approved').reduce((acc, curr) => acc + Number(curr.amount), 0);
+  // Global Admin Variables
+  const adminTotalMeal = deposits.filter(d => d.status === "approved" && d.deposit_category === "meal").reduce((acc, curr) => acc + Number(curr.amount), 0);
+  const adminTotalMess = deposits.filter(d => d.status === "approved" && d.deposit_category === "mess").reduce((acc, curr) => acc + Number(curr.amount), 0);
+  const pendingRequests = deposits.filter(d => d.status === "pending");
+
+  // Search Filter for Auto-complete
+  const filteredMembers = members.filter(m => 
+    m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (m.room_number && m.room_number.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
+    <div className="relative min-h-[80vh] w-full max-w-7xl mx-auto space-y-6 animate-fade-in z-0 pb-10 px-4 md:px-0">
       
-      {/* Title Header */}
-      <div className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Meal Deposits Ledger</h2>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          {userRole === 'admin' ? "Manager Mode: Reviewing border meal fund additions." : "Add money to your personal meal balance."}
-        </p>
+      {/* Premium Background Glows */}
+      <div className="fixed top-20 left-10 w-96 h-96 bg-emerald-500/10 rounded-full filter blur-3xl pointer-events-none -z-10"></div>
+      <div className="fixed bottom-10 right-10 w-96 h-96 bg-teal-500/10 rounded-full filter blur-3xl pointer-events-none -z-10"></div>
+
+      {/* Header Banner */}
+      <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-6 md:p-8 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-600">Fund Deposit Terminal</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-[11px] font-bold mt-1 uppercase tracking-widest">Meal & Mess Rent Vault</p>
+        </div>
       </div>
 
-      {/* Analytics Summary Cards (Visible ONLY to Meal Manager/Admin) */}
-      {userRole === "admin" && !loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-[#0F172A] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Pending Meal Requests</p>
-              <h4 className="text-lg font-black text-slate-900 dark:text-white">{pendingCount} requests</h4>
-            </div>
+      {/* 🎯 RESTORED TOP FINANCIAL WIDGETS 🎯 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Widget 1: Meal Fund */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-800 dark:bg-gradient-to-br dark:from-white dark:to-slate-200 px-6 py-5 rounded-3xl shadow-xl border border-slate-700 dark:border-white/20 flex items-center justify-between relative overflow-hidden group">
+          <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all"></div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400 dark:text-emerald-600">
+              {userRole === 'user' ? 'My Available Meal Fund' : 'System Total Meal Vault'}
+            </p>
+            <h3 className="text-3xl font-black text-white dark:text-slate-900 mt-1">
+              ৳ {userRole === 'user' ? myMealBalance.toLocaleString() : adminTotalMeal.toLocaleString()}
+            </h3>
           </div>
-          <div className="bg-white dark:bg-[#0F172A] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Total Approved Meal Fund</p>
-              <h4 className="text-lg font-black text-slate-900 dark:text-white">৳ {totalApproved.toLocaleString()}</h4>
-            </div>
-          </div>
+          <div className="w-14 h-14 bg-emerald-500/20 text-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-600 rounded-2xl flex items-center justify-center text-3xl shadow-inner z-10">🍽️</div>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Widget 2: Mess Rent */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-800 dark:bg-gradient-to-br dark:from-white dark:to-slate-200 px-6 py-5 rounded-3xl shadow-xl border border-slate-700 dark:border-white/20 flex items-center justify-between relative overflow-hidden group">
+          <div className="absolute right-0 top-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all"></div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-400 dark:text-amber-600">
+              {userRole === 'user' ? 'My Mess Rent Paid' : 'System Total Mess Collected'}
+            </p>
+            <h3 className="text-3xl font-black text-white dark:text-slate-900 mt-1">
+              ৳ {userRole === 'user' ? myMessBalance.toLocaleString() : adminTotalMess.toLocaleString()}
+            </h3>
+          </div>
+          <div className="w-14 h-14 bg-amber-500/20 text-amber-500 dark:bg-amber-500/10 dark:text-amber-600 rounded-2xl flex items-center justify-center text-3xl shadow-inner z-10">🏠</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Deposit Form Section */}
-        <div className="xl:col-span-1">
-          <div className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 border-b border-slate-100 dark:border-slate-800/60 pb-3">Deposit Meal Fund</h3>
-            <form onSubmit={handleSubmitDeposit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Amount (BDT)</label>
-                <input type="number" required min="50" placeholder="e.g. 500" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white" />
+        {/* LEFT PANEL: Deposit Request / Add Form */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl relative overflow-visible">
+            <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-6 border-b border-slate-200/50 dark:border-slate-700/50 pb-3 flex items-center gap-2">
+              <span>💳</span> {userRole === "user" ? "Submit Deposit Request" : "Direct Add Deposit"}
+            </h3>
+            
+            <form onSubmit={handleSubmitDeposit} className="space-y-5">
+              
+              {/* 🎯 PRO SEARCHABLE DROPDOWN (Admin Only) */}
+              {userRole !== "user" && (
+                <div className="relative" ref={dropdownRef}>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Search Resident</label>
+                  <input 
+                    type="text" 
+                    placeholder="Type Name or Room No..." 
+                    value={searchTerm} 
+                    onChange={(e) => { 
+                      setSearchTerm(e.target.value); 
+                      setShowDropdown(true); 
+                      setSelectedMember(""); // Reset selected member when typing
+                      if (depositCategory === 'mess') setAmount(""); // Clear amount until someone is selected
+                    }}
+                    onFocus={() => setShowDropdown(true)}
+                    className="w-full px-4 py-3 text-sm font-bold bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-emerald-500"
+                  />
+                  {/* Dropdown Menu */}
+                  {showDropdown && (
+                    <div className="absolute w-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl max-h-48 overflow-y-auto z-50">
+                      {filteredMembers.length === 0 ? (
+                        <div className="p-3 text-xs text-slate-400 font-bold text-center">No residents found.</div>
+                      ) : (
+                        filteredMembers.map(m => (
+                          <div 
+                            key={m.id} 
+                            onClick={() => { 
+                              setSelectedMember(m.id); 
+                              setSearchTerm(`${m.full_name} (Room: ${m.room_number || 'N/A'})`); 
+                              setShowDropdown(false); 
+                            }}
+                            className="px-4 py-3 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 cursor-pointer flex justify-between items-center transition-colors border-b border-slate-50 dark:border-slate-700/50 last:border-0"
+                          >
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{m.full_name}</span>
+                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded">R: {m.room_number || 'N/A'}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Category Selector */}
+              <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-xl">
+                <button type="button" onClick={() => setDepositCategory("meal")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${depositCategory === 'meal' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>
+                  🍽️ Meal Fund
+                </button>
+                <button type="button" onClick={() => setDepositCategory("mess")} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${depositCategory === 'mess' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>
+                  🏠 Mess Rent
+                </button>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Payment Method</label>
-                <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none cursor-pointer focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-200">
-                  <option value="Hand_Cash">Hand Cash</option>
-                  <option value="bKash">bKash</option>
-                  <option value="Nagad">Nagad</option>
-                  <option value="Rocket">Rocket</option>
-                </select>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Amount (৳) {depositCategory === 'mess' && '- Auto Fetched'}</label>
+                <input type="number" placeholder="Enter amount" required value={amount} onChange={e => setAmount(e.target.value)} className={`w-full px-4 py-3 text-2xl font-black bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-emerald-500 ${depositCategory === 'mess' ? 'text-amber-500' : 'text-emerald-500'}`} />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">TrxID / Payer Name Reference</label>
-                <input type="text" required placeholder={method === "Hand_Cash" ? "e.g. Handed to Manager" : "Transaction ID"} value={trxId} onChange={(e) => setTrxId(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Date</label>
+                  <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2.5 text-xs font-bold bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Method</label>
+                  <select value={method} onChange={e => setMethod(e.target.value)} className="w-full px-3 py-2.5 text-xs font-bold bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-emerald-500 cursor-pointer">
+                    <option value="Cash">💵 Cash</option>
+                    <option value="bKash">🦅 bKash</option>
+                    <option value="Nagad">🔥 Nagad</option>
+                    <option value="Bank">🏦 Bank</option>
+                  </select>
+                </div>
               </div>
-              <button type="submit" disabled={actionLoading} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm">
-                Submit Deposit
+
+              <button type="submit" disabled={actionLoading} className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 font-black uppercase tracking-widest text-[11px] rounded-2xl shadow-lg active:scale-98 transition-all mt-2">
+                {userRole === "user" ? "Send Request to Manager" : "Approve & Update Balance"}
               </button>
             </form>
           </div>
         </div>
 
-        {/* History Table Section */}
-        <div className="xl:col-span-2">
-          <div className="bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/20 text-sm font-bold text-slate-800 dark:text-slate-200">
-              Meal History Logs
+        {/* RIGHT PANEL: Pending Requests & History */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Admin Pending Requests Box */}
+          {userRole !== "user" && pendingRequests.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-500/5 backdrop-blur-2xl rounded-[2rem] border-2 border-amber-200 dark:border-amber-500/30 shadow-xl overflow-hidden animate-fade-in">
+              <div className="p-4 border-b border-amber-200/50 dark:border-amber-500/20 bg-amber-100/50 dark:bg-amber-500/10">
+                <h3 className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                  <span>🔔</span> Action Required: Pending Requests ({pendingRequests.length})
+                </h3>
+              </div>
+              <div className="p-2 divide-y divide-amber-200/30 dark:divide-amber-500/10">
+                {pendingRequests.map((req) => (
+                  <div key={req.id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-white/40 dark:hover:bg-slate-900/40 transition-colors">
+                    <div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                        {req.profiles?.full_name} 
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${req.deposit_category === 'mess' ? 'bg-amber-200 text-amber-800 dark:bg-amber-500/20 dark:text-amber-400' : 'bg-emerald-200 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400'}`}>
+                          {req.deposit_category}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-500 mt-1">Requested: ৳{req.amount} via {req.method} on {new Date(req.date).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleDeleteDeposit(req.id, req.user_id, req.amount, req.deposit_category, req.status)} className="px-3 py-2 bg-white dark:bg-slate-800 text-rose-500 rounded-lg text-[10px] font-black uppercase border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-500/10">Reject</button>
+                      <button onClick={() => handleApproveRequest(req.id, req.user_id, req.amount, req.deposit_category)} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase shadow-md transition-all">Approve Fund</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="overflow-x-auto">
+          )}
+
+          {/* Deposit History Ledger */}
+          <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl rounded-[2.5rem] border border-white/50 dark:border-slate-700/50 shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/40 dark:bg-slate-800/40">
+              <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">
+                {userRole === 'user' ? 'My Deposit Transactions' : 'Global Approved Ledger'}
+              </h3>
+            </div>
+            
+            <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 dark:bg-slate-800/50">
-                    <th className="px-5 py-4">Date & Ref</th>
-                    <th className="px-5 py-4">Border</th>
-                    <th className="px-5 py-4">Amount</th>
-                    <th className="px-5 py-4 text-right">Action</th>
+                  <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200/50 dark:border-slate-700/50">
+                    <th className="px-6 py-4">Fund Type</th>
+                    {userRole !== "user" && <th className="px-6 py-4">Resident</th>}
+                    <th className="px-6 py-4">Details</th>
+                    <th className="px-6 py-4 text-right">Status / Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                <tbody className="divide-y divide-slate-100/50 dark:divide-slate-800/50">
                   {loading ? (
-                    <tr><td colSpan={4} className="text-center py-10 text-sm font-medium text-slate-400 animate-pulse">Loading logs...</td></tr>
+                    <tr><td colSpan={userRole === 'user' ? 3 : 4} className="text-center py-16 text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Syncing Vault...</td></tr>
                   ) : deposits.length === 0 ? (
-                    <tr><td colSpan={4} className="text-center py-12 text-sm text-slate-400">No meal deposits recorded.</td></tr>
-                  ) : (
-                    deposits.map((dep) => (
-                      <tr key={dep.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                        <td className="px-5 py-4 text-sm">
-                          <div className="font-semibold text-slate-900 dark:text-slate-200">{new Date(dep.created_at).toLocaleDateString()}</div>
-                          <div className="text-[11px] text-slate-400 font-mono mt-0.5">{dep.transaction_id}</div>
+                    <tr><td colSpan={userRole === 'user' ? 3 : 4} className="text-center py-16 text-sm text-slate-400 font-bold">No transactions found.</td></tr>
+                  ) : deposits.map((trx) => (
+                    <tr key={trx.id} className="hover:bg-white/50 dark:hover:bg-slate-800/50 transition-colors group">
+                      
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${trx.deposit_category === 'mess' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'}`}>
+                          {trx.deposit_category === 'mess' ? '🏠 Mess Rent' : '🍽️ Meal Fund'}
+                        </span>
+                      </td>
+
+                      {userRole !== "user" && (
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-sm text-slate-900 dark:text-white">{trx.profiles?.full_name || 'Unknown'}</div>
+                          <div className="text-[10px] font-semibold text-slate-400 mt-0.5">Room: {trx.profiles?.room_number || 'N/A'}</div>
                         </td>
-                        <td className="px-5 py-4 text-sm">
-                          <div className="font-semibold text-slate-900 dark:text-slate-200">{dep.profiles?.full_name}</div>
-                          <div className="text-xs text-slate-400">Room: {dep.profiles?.room_number || "N/A"}</div>
-                        </td>
-                        <td className="px-5 py-4 text-sm">
-                          <div className="font-bold text-slate-900 dark:text-white">৳ {dep.amount}</div>
-                          <div className="text-[10px] text-slate-400 uppercase mt-0.5">{dep.method.replace('_', ' ')}</div>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          {dep.status === "pending" ? (
-                            userRole === "user" || userRole === "super_admin" ? (
-                              <span className="text-amber-500 font-bold text-xs uppercase">Pending</span>
-                            ) : (
-                              <div className="flex justify-end gap-1.5">
-                                <button onClick={() => handleApprove(dep)} disabled={actionLoading} className="px-2.5 py-1 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 rounded-lg text-[10px] font-bold uppercase">Approve</button>
-                                <button onClick={() => handleReject(dep.id)} disabled={actionLoading} className="px-2.5 py-1 bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 rounded-lg text-[10px] font-bold uppercase">Reject</button>
-                              </div>
-                            )
-                          ) : (
-                            <span className={`text-xs font-bold uppercase ${dep.status === 'approved' ? 'text-emerald-500' : 'text-slate-400'}`}>{dep.status}</span>
+                      )}
+
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-sm text-slate-900 dark:text-white">
+                          {new Date(trx.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </div>
+                        <div className="text-[10px] font-black text-slate-500 uppercase mt-0.5">Via {trx.method}</div>
+                      </td>
+
+                      <td className="px-6 py-4 text-right">
+                        <div className={`font-black text-lg ${trx.status === 'pending' ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                          {trx.status === 'pending' ? '⏳' : '+'} ৳{Number(trx.amount).toLocaleString()}
+                        </div>
+                        <div className="flex justify-end gap-2 mt-1">
+                          <span className={`text-[8px] font-black uppercase tracking-widest ${trx.status === 'pending' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                            {trx.status}
+                          </span>
+                          {userRole !== "user" && (
+                            <button onClick={() => handleDeleteDeposit(trx.id, trx.user_id, trx.amount, trx.deposit_category, trx.status)} className="opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 text-[10px] font-black transition-opacity" title="Reverse Transaction">✕</button>
                           )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                        </div>
+                      </td>
+
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

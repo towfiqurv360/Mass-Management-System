@@ -1,112 +1,273 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "../lib/supabase";
 import Link from "next/link";
-import ThemeToggle from "./components/ThemeToggle";
+import { useRouter } from "next/navigation";
 
-export default function Home() {
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] text-gray-900 dark:text-white transition-colors duration-300 flex flex-col">
+export default function DashboardOverview() {
+  const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
+  // States
+  const [profile, setProfile] = useState<any>(null);
+  const [todayMeal, setMyMeal] = useState<any>(null);
+  const [summary, setSummary] = useState({ totalMembers: 0, activeMealsToday: 0, monthlyBazaar: 0 });
+  
+  // Premium Dropdown State
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+    fetchDashboardData();
+
+    // Close menu when clicking outside
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+      if (profileData) setProfile(profileData);
+
+      const today = new Date();
+      today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+      const todayStr = today.toISOString().split("T")[0];
       
-      {/* Navbar */}
-      <header className="h-20 px-6 md:px-12 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-            <span className="text-white font-black text-xl leading-none">M</span>
-          </div>
-          <h1 className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400">
-            Mess Pro
-          </h1>
-        </div>
+      const { data: mealData } = await supabase.from("daily_meals").select("*").eq("user_id", user.id).eq("date", todayStr).maybeSingle();
+      if (mealData) setMyMeal(mealData);
+
+      if (profileData?.role !== "user") {
+        const { count: memberCount } = await supabase.from("profiles").select("*", { count: 'exact', head: true });
+        const { data: activeMeals } = await supabase.from("daily_meals").select("lunch, dinner, breakfast").eq("date", todayStr);
         
-        <div className="flex items-center gap-4 md:gap-6">
-          <Link href="/login" className="hidden md:block font-bold text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-            Sign In
-          </Link>
-          <Link href="/register" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm md:text-base">
-            Get Started
-          </Link>
-          <ThemeToggle />
-        </div>
-      </header>
+        const activeCount = activeMeals?.filter(m => Number(m.lunch) > 0 || Number(m.dinner) > 0 || Number(m.breakfast) > 0).length || 0;
+        
+        const currentMonth = todayStr.substring(0, 7);
+        const { data: expenses } = await supabase.from("expenses").select("amount").eq("expense_type", "meal").like("created_at", `${currentMonth}%`);
+        const totalBazaar = expenses?.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) || 0;
 
-      {/* Hero Section */}
-      <main className="flex-1">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-20 md:py-32 flex flex-col items-center text-center">
-          
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold text-sm mb-8 animate-fade-in">
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-            </span>
-            Mess Management System 2.0 is Here
-          </div>
+        setSummary({
+          totalMembers: memberCount || 0,
+          activeMealsToday: activeCount,
+          monthlyBazaar: totalBazaar
+        });
+      }
+    } catch (error) {
+      console.error("Dashboard Sync Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-          <h2 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-tight animate-fade-in" style={{ animationDelay: "100ms" }}>
-            Simplify Your <br className="hidden md:block" />
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Mess Life</span> Today.
-          </h2>
-          
-          <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mb-10 leading-relaxed animate-fade-in" style={{ animationDelay: "200ms" }}>
-            The ultimate management system for modern messes and hostels. Track daily meals, monitor expenses, manage deposits, and calculate live meal rates seamlessly.
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
+  if (!isMounted) return null;
+
+  if (loading) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Syncing Matrix...</p>
+      </div>
+    );
+  }
+
+  // Financial Variables
+  const rent = Number(profile?.current_month_rent || 0);
+  const maid = Number(profile?.current_month_maid || 0);
+  const wifi = Number(profile?.current_month_wifi || 0);
+  const electricity = Number(profile?.current_month_electricity || 0);
+  const totalDues = rent + maid + wifi + electricity;
+
+  const todayTotalMeals = todayMeal ? (Number(todayMeal.lunch || 0) + Number(todayMeal.dinner || 0) + Number(todayMeal.breakfast || 0) + Number(todayMeal.guest_lunch || 0) + Number(todayMeal.guest_dinner || 0)) : 0;
+
+  return (
+    <div className="relative min-h-[80vh] w-full max-w-7xl mx-auto space-y-8 animate-fade-in z-0 pb-10 px-4 md:px-0">
+      
+      {/* Premium Background Glows */}
+      <div className="fixed top-20 left-10 w-96 h-96 bg-indigo-500/10 rounded-full filter blur-3xl pointer-events-none -z-10"></div>
+      <div className="fixed bottom-10 right-10 w-96 h-96 bg-purple-500/10 rounded-full filter blur-3xl pointer-events-none -z-10"></div>
+
+      {/* ========================================== */}
+      {/* 🎯 NEW TOP NAVIGATION BANNER & DROPDOWN 🎯 */}
+      {/* ========================================== */}
+      <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-4 md:p-6 rounded-[2.5rem] border border-white/50 dark:border-slate-700/50 shadow-2xl flex justify-between items-center relative z-50">
+        
+        <div>
+          <h1 className="text-xl md:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            Welcome, <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-600">{profile?.full_name?.split(' ')[0] || "Border"}</span>
+          </h1>
+          <p className="text-[10px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5 uppercase tracking-wider">
+            Room: <span className="text-indigo-500 font-bold">{profile?.room_number || "N/A"}</span> • Rank: <span className="text-purple-500 font-bold">{profile?.role?.replace('_', ' ')}</span>
           </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto animate-fade-in" style={{ animationDelay: "300ms" }}>
-            <Link href="/register" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl hover:shadow-2xl transform hover:-translate-y-1 text-lg flex items-center justify-center gap-2">
-              Create Free Account
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-            </Link>
-            <Link href="/login" className="bg-white dark:bg-[#1E293B] border border-gray-200 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 text-gray-900 dark:text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-sm hover:shadow-md text-lg text-center">
-              Login to Dashboard
-            </Link>
-          </div>
         </div>
 
-        {/* Features Grid */}
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-20 border-t border-gray-100 dark:border-gray-800/50">
-          <div className="text-center mb-16">
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Everything You Need</h3>
-            <p className="text-gray-500 dark:text-gray-400">Manage your entire mess from one unified dashboard.</p>
-          </div>
+        {/* PRO-LEVEL AVATAR & DROPDOWN MENU */}
+        <div className="relative" ref={menuRef}>
+          {/* Avatar Trigger Button */}
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="flex items-center gap-3 p-1.5 pr-4 rounded-full bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all active:scale-95 group"
+          >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white shadow-lg overflow-hidden shrink-0 border-2 border-white dark:border-slate-900">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                profile?.full_name?.charAt(0).toUpperCase() || "U"
+              )}
+            </div>
+            <div className="hidden sm:block text-left">
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-tight">My Profile</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Options ⏷</p>
+            </div>
+          </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className="bg-white dark:bg-[#0F172A] p-8 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-xl transition-all group">
-              <div className="w-14 h-14 bg-blue-50 dark:bg-blue-500/10 rounded-2xl flex items-center justify-center mb-6 border border-blue-100 dark:border-blue-500/20 group-hover:scale-110 transition-transform">
-                <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-              </div>
-              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Meal Tracking</h4>
-              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">Daily meal on/off system with exact counts and guest meal management features.</p>
+          {/* Elegant Dropdown Modal */}
+          <div className={`absolute right-0 mt-3 w-64 bg-white dark:bg-[#0F172A]/95 backdrop-blur-3xl border border-slate-200 dark:border-slate-700/50 rounded-3xl shadow-2xl p-3 transition-all duration-300 transform origin-top-right ${
+            isMenuOpen ? "scale-100 opacity-100 translate-y-0" : "scale-95 opacity-0 -translate-y-4 pointer-events-none"
+          }`}>
+            
+            <div className="px-3 pb-3 mb-2 border-b border-slate-100 dark:border-slate-800">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Navigation Menu</p>
             </div>
 
-            {/* Feature 2 */}
-            <div className="bg-white dark:bg-[#0F172A] p-8 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-xl transition-all group">
-              <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-6 border border-emerald-100 dark:border-emerald-500/20 group-hover:scale-110 transition-transform">
-                <svg className="w-7 h-7 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-              </div>
-              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Live Meal Rate</h4>
-              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">Automated calculations of expenses vs total meals giving you real-time accurate meal rates.</p>
-            </div>
+            <ul className="space-y-1">
+              <li>
+                <Link href="/dashboard/profile" className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                  <span className="text-indigo-500">⚙️</span> Profile Settings
+                </Link>
+              </li>
+              <li>
+                <Link href="/dashboard/meals" className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                  <span className="text-rose-500">🍱</span> Daily Meal Control
+                </Link>
+              </li>
+              <li>
+                <Link href="/dashboard/bazaar-planner" className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                  <span className="text-emerald-500">🛒</span> Bazaar Planner
+                </Link>
+              </li>
+              
+              {profile?.role !== 'user' && (
+                <>
+                  <div className="w-full h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
+                  <li>
+                    <Link href="/dashboard/members" className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                      <span className="text-purple-500">👥</span> Resident Directory
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/dashboard/deposits" className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                      <span className="text-blue-500">💰</span> Fund Deposits
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/dashboard/billing" className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">
+                      <span className="text-amber-500">🗂️</span> Billing & Invoice
+                    </Link>
+                  </li>
+                </>
+              )}
+            </ul>
 
-            {/* Feature 3 */}
-            <div className="bg-white dark:bg-[#0F172A] p-8 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-xl transition-all group">
-              <div className="w-14 h-14 bg-purple-50 dark:bg-purple-500/10 rounded-2xl flex items-center justify-center mb-6 border border-purple-100 dark:border-purple-500/20 group-hover:scale-110 transition-transform">
-                <svg className="w-7 h-7 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-              </div>
-              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Deposit System</h4>
-              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">Users can submit money receipts online and admins can approve them with one click.</p>
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 dark:text-rose-400 text-sm font-black uppercase tracking-wider transition-colors">
+                Log Out
+              </button>
             </div>
           </div>
         </div>
-      </main>
+      </div>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0B1120] py-8">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-gray-500 dark:text-gray-400 font-medium">© {new Date().getFullYear()} Mess Pro. All rights reserved.</p>
-          <div className="flex gap-6 text-sm font-bold text-gray-400">
-            <a href="#" className="hover:text-indigo-500 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-indigo-500 transition-colors">Terms of Service</a>
+
+      {/* ========================================== */}
+      {/* CORE FINANCIALS GRID (User View) */}
+      {/* ========================================== */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-6 rounded-3xl border border-white/40 dark:border-slate-800/80 shadow-xl relative overflow-hidden transition-transform duration-300 hover:-translate-y-1">
+          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Available Dining Funds</p>
+          <h3 className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-2">৳ {(profile?.balance || 0).toLocaleString()}</h3>
+          <p className="text-[11px] font-semibold text-slate-500 mt-2">Current active meal balance for bazaar deductions.</p>
+          <div className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">৳</div>
+        </div>
+
+        <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-6 rounded-3xl border border-white/40 dark:border-slate-800/80 shadow-xl relative overflow-hidden transition-transform duration-300 hover:-translate-y-1">
+          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Pending Mess Invoice</p>
+          <h3 className={`text-3xl font-black mt-2 ${totalDues > 0 ? 'text-rose-500' : 'text-slate-400'}`}>৳ {totalDues.toLocaleString()}</h3>
+          <div className="mt-2 flex items-center gap-2">
+            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${profile?.billing_status === 'pending_payment' ? 'bg-rose-100 text-rose-700' : profile?.billing_status === 'under_review' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+              {profile?.billing_status?.replace('_', ' ') || 'CLEAR'}
+            </span>
+          </div>
+          <div className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center">💳</div>
+        </div>
+
+        <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-6 rounded-3xl border border-white/40 dark:border-slate-800/80 shadow-xl relative overflow-hidden transition-transform duration-300 hover:-translate-y-1">
+          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Meal Registry</p>
+          <h3 className="text-3xl font-black text-indigo-600 dark:text-indigo-400 mt-2">{todayTotalMeals.toFixed(1)} <span className="text-xs font-normal text-slate-400">portions</span></h3>
+          <p className="text-[11px] font-semibold text-slate-500 mt-2">
+            {todayMeal?.is_locked ? "🔒 Securely locked for today" : "🔓 Open for scheduled window modifications"}
+          </p>
+          <div className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center">🍽️</div>
+        </div>
+
+      </div>
+
+      {/* ========================================== */}
+      {/* EXTRA ADMINISTRATIVE OVERVIEW (Managers Only) */}
+      {/* ========================================== */}
+      {profile?.role !== "user" && (
+        <div className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-slate-800/50">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Management Operational Overview</h3>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-900 text-white p-5 rounded-2xl flex justify-between items-center shadow-lg">
+              <div>
+                <p className="text-[10px] font-bold uppercase opacity-60 tracking-wider">Total Active Borders</p>
+                <h4 className="text-xl font-black mt-1">{summary.totalMembers} Registered</h4>
+              </div>
+              <span className="text-xl">👥</span>
+            </div>
+
+            <div className="bg-white/50 dark:bg-[#0F172A]/50 backdrop-blur-xl p-5 rounded-2xl border border-white/40 dark:border-slate-800 shadow-md flex justify-between items-center">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active Mess Diners Today</p>
+                <h4 className="text-xl font-black text-slate-900 dark:text-white mt-1">{summary.activeMealsToday} Active</h4>
+              </div>
+              <span className="text-xl">🔥</span>
+            </div>
+
+            <div className="bg-white/50 dark:bg-[#0F172A]/50 backdrop-blur-xl p-5 rounded-2xl border border-white/40 dark:border-slate-800 shadow-md flex justify-between items-center">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Accumulated Bazaar Expense</p>
+                <h4 className="text-xl font-black text-slate-900 dark:text-white mt-1">৳ {summary.monthlyBazaar.toLocaleString()}</h4>
+              </div>
+              <span className="text-xl">🛒</span>
+            </div>
           </div>
         </div>
-      </footer>
+      )}
+
     </div>
   );
 }
