@@ -52,14 +52,12 @@ export default function DepositsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🎯 THE FIX: Auto-fill Mess Amount based on WHO is selected
+  // 🎯 Auto-fill Mess Amount based on WHO is selected
   useEffect(() => {
     if (depositCategory === "mess") {
       if (userRole === "user") {
-        // Auto-fill for logged-in user
         setAmount(myTotalMessDue > 0 ? myTotalMessDue.toString() : "");
       } else if (selectedMember) {
-        // Auto-fill for ADMIN based on SELECTED MEMBER
         const targetMember = members.find(m => m.id === selectedMember);
         if (targetMember) {
           const targetDue = Number(targetMember.current_month_rent || 0) + 
@@ -74,7 +72,7 @@ export default function DepositsPage() {
         setAmount("");
       }
     } else if (depositCategory === "meal") {
-      setAmount(""); // Meal fund is always manual
+      setAmount("");
     }
   }, [depositCategory, myTotalMessDue, userRole, selectedMember, members]);
 
@@ -99,8 +97,7 @@ export default function DepositsPage() {
       setMyTotalMessDue(rent + maid + wifi + electricity); 
 
       if (role !== "user") {
-        // 🎯 Fetch ALL necessary billing fields for auto-filling any user's data
-        const { data: allMembers } = await supabase.from("profiles").select("id, full_name, room_number, current_month_rent, current_month_maid, current_month_wifi, current_month_electricity").order("full_name");
+        const { data: allMembers } = await supabase.from("profiles").select("id, full_name, room_number, current_month_rent, current_month_maid, current_month_wifi, current_month_electricity, email").order("full_name");
         setMembers(allMembers || []);
 
         const { data: allDeposits } = await supabase.from("deposits")
@@ -140,18 +137,44 @@ export default function DepositsPage() {
       });
       if (depositErr) throw depositErr;
 
+      // Admin Direct Add Logic
       if (!isRequest) {
-        const { data: userProfile } = await supabase.from("profiles").select("balance, mess_balance").eq("id", targetUserId).single();
+        const { data: userProfile } = await supabase.from("profiles").select("balance, mess_balance, email").eq("id", targetUserId).single();
         if (depositCategory === "meal") {
           await supabase.from("profiles").update({ balance: Number(userProfile?.balance || 0) + Number(amount) }).eq("id", targetUserId);
         } else {
           await supabase.from("profiles").update({ mess_balance: Number(userProfile?.mess_balance || 0) + Number(amount) }).eq("id", targetUserId);
         }
+
+        // Notification for Direct Add
+        await supabase.from("notifications").insert({
+          user_id: targetUserId,
+          title: "Deposit Added! ✅",
+          message: `৳${amount} for ${depositCategory === 'mess' ? 'Mess Rent' : 'Meal Fund'} has been directly added to your balance.`,
+        });
+
+        // Email for Direct Add
+        if (userProfile?.email) {
+          fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: userProfile.email,
+              subject: 'Deposit Added - Mess Management',
+              html: `<div style="font-family: Arial, sans-serif; padding: 20px; background: #f8fafc; border-radius: 10px;">
+                <h2 style="color: #10b981;">Deposit Successful!</h2>
+                <p>Hello,</p>
+                <p>An amount of <strong>৳${amount}</strong> for <strong>${depositCategory.toUpperCase()}</strong> has been added to your account by the manager.</p>
+                <p>Your updated balance is now live on your dashboard.</p>
+                <br/><p>Regards,<br/>Mess Management Team</p>
+              </div>`
+            })
+          }).catch(console.error); // Catch email errors silently so it doesn't break the app
+        }
       }
 
       toast.success(isRequest ? "Deposit request sent!" : `Added ৳${amount} to account!`, { id: toastId });
       
-      // Reset form
       setAmount(""); 
       if (userRole !== "user") {
         setSearchTerm(""); 
@@ -172,13 +195,46 @@ export default function DepositsPage() {
     setActionLoading(true);
     const toastId = toast.loading("Approving request...");
     try {
-      const { data: userProfile } = await supabase.from("profiles").select("balance, mess_balance").eq("id", targetUserId).single();
+      // 🎯 FIX: Select email along with balances inside the try block
+      const { data: userProfile } = await supabase.from("profiles").select("balance, mess_balance, email").eq("id", targetUserId).single();
+      
       if (reqCategory === "meal") {
         await supabase.from("profiles").update({ balance: Number(userProfile?.balance || 0) + reqAmount }).eq("id", targetUserId);
       } else {
         await supabase.from("profiles").update({ mess_balance: Number(userProfile?.mess_balance || 0) + reqAmount }).eq("id", targetUserId);
       }
+      
       await supabase.from("deposits").update({ status: "approved" }).eq("id", depositId);
+      
+      // 🎯 FIX: Notification and Email logic placed correctly inside try block
+      await supabase.from("notifications").insert({
+        user_id: targetUserId,
+        title: "Deposit Approved! ✅",
+        message: `Your deposit of ৳${reqAmount} for ${reqCategory === 'mess' ? 'Mess Rent' : 'Meal Fund'} has been approved and added to your balance.`,
+      });
+
+      const userEmail = userProfile?.email; 
+      if (userEmail) {
+        fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: userEmail,
+            subject: 'Deposit Approved - Mess Management',
+            html: `
+              <div style="font-family: Arial, sans-serif; padding: 20px; background: #f8fafc; border-radius: 10px;">
+                <h2 style="color: #10b981;">Deposit Successful!</h2>
+                <p>Hello,</p>
+                <p>Your deposit request of <strong>৳${reqAmount}</strong> for <strong>${reqCategory.toUpperCase()}</strong> has been verified by the manager.</p>
+                <p>Your updated balance is now live on your dashboard.</p>
+                <br/>
+                <p>Regards,<br/>Mess Management Team</p>
+              </div>
+            `
+          })
+        }).catch(console.error); // Silent catch for email fetch to prevent crashing
+      }
+
       toast.success("Request approved!", { id: toastId });
       fetchDepositsData();
     } catch (error) {
@@ -186,35 +242,6 @@ export default function DepositsPage() {
     } finally {
       setActionLoading(false);
     }
-   
-await supabase.from("notifications").insert({
-  user_id: targetUserId,
-  title: "Deposit Approved! ✅",
-  message: `Your deposit of ৳${reqAmount} for ${reqCategory === 'mess' ? 'Mess Rent' : 'Meal Fund'} has been approved and added to your balance.`,
-});
-
-
-const userEmail = userProfile.email; 
-if (userEmail) {
-  await fetch('/api/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: userEmail,
-      subject: 'Deposit Approved - Mess Management',
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f8fafc; border-radius: 10px;">
-          <h2 style="color: #10b981;">Deposit Successful!</h2>
-          <p>Hello,</p>
-          <p>Your deposit of <strong>৳${reqAmount}</strong> for <strong>${reqCategory.toUpperCase()}</strong> has been verified by the manager.</p>
-          <p>Your updated balance is now live on your dashboard.</p>
-          <br/>
-          <p>Regards,<br/>Mess Management Team</p>
-        </div>
-      `
-    })
-  });
-}
   };
 
   const handleDeleteDeposit = async (depositId: string, targetUserId: string, depAmount: number, depCategory: string, depStatus: string) => {
@@ -250,7 +277,7 @@ if (userEmail) {
 
   // Search Filter for Auto-complete
   const filteredMembers = members.filter(m => 
-    m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    m.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (m.room_number && m.room_number.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -269,9 +296,8 @@ if (userEmail) {
         </div>
       </div>
 
-      {/* 🎯 RESTORED TOP FINANCIAL WIDGETS 🎯 */}
+      {/* 🎯 TOP FINANCIAL WIDGETS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Widget 1: Meal Fund */}
         <div className="bg-gradient-to-br from-slate-900 to-slate-800 dark:bg-gradient-to-br dark:from-white dark:to-slate-200 px-6 py-5 rounded-3xl shadow-xl border border-slate-700 dark:border-white/20 flex items-center justify-between relative overflow-hidden group">
           <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all"></div>
           <div>
@@ -285,7 +311,6 @@ if (userEmail) {
           <div className="w-14 h-14 bg-emerald-500/20 text-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-600 rounded-2xl flex items-center justify-center text-3xl shadow-inner z-10">🍽️</div>
         </div>
 
-        {/* Widget 2: Mess Rent */}
         <div className="bg-gradient-to-br from-slate-900 to-slate-800 dark:bg-gradient-to-br dark:from-white dark:to-slate-200 px-6 py-5 rounded-3xl shadow-xl border border-slate-700 dark:border-white/20 flex items-center justify-between relative overflow-hidden group">
           <div className="absolute right-0 top-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all"></div>
           <div>
@@ -322,13 +347,12 @@ if (userEmail) {
                     onChange={(e) => { 
                       setSearchTerm(e.target.value); 
                       setShowDropdown(true); 
-                      setSelectedMember(""); // Reset selected member when typing
-                      if (depositCategory === 'mess') setAmount(""); // Clear amount until someone is selected
+                      setSelectedMember(""); 
+                      if (depositCategory === 'mess') setAmount(""); 
                     }}
                     onFocus={() => setShowDropdown(true)}
                     className="w-full px-4 py-3 text-sm font-bold bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-emerald-500"
                   />
-                  {/* Dropdown Menu */}
                   {showDropdown && (
                     <div className="absolute w-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl max-h-48 overflow-y-auto z-50">
                       {filteredMembers.length === 0 ? (
