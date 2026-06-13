@@ -13,7 +13,9 @@ const getLocalToday = () => {
 export default function MealControlPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [userRole, setUserRole] = useState("user");
+  
+  // 🚀 SECURITY: actualRole state dictates exact permissions
+  const [actualRole, setActualRole] = useState("user"); 
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   const realTimeToday = getLocalToday();
@@ -21,7 +23,7 @@ export default function MealControlPage() {
 
   // System Settings for Time Window
   const [timeWindow, setTimeWindow] = useState({ start: "20:00", end: "22:00" });
-  const [isTimeLocked, setIsTimeLocked] = useState(true); // Default to locked
+  const [isTimeLocked, setIsTimeLocked] = useState(true);
 
   // User's Personal Meal State
   const [myMeal, setMyMeal] = useState({ 
@@ -43,7 +45,7 @@ export default function MealControlPage() {
     fetchData();
   }, [selectedDate]);
 
-  // 🎯 STRICT TIME LOCK ENGINE (Checks every 30 seconds)
+  // 🎯 STRICT TIME LOCK ENGINE
   useEffect(() => {
     checkTimeLock();
     const interval = setInterval(checkTimeLock, 30000);
@@ -54,14 +56,11 @@ export default function MealControlPage() {
     const now = new Date();
     const currentString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
-    // 🔒 STRICT RULE: Current time MUST be within the start and end time window.
     const isWithinWindow = currentString >= timeWindow.start && currentString <= timeWindow.end;
     
     if (selectedDate < realTimeToday) {
-      // Past dates are ALWAYS locked
       setIsTimeLocked(true);
     } else {
-      // Today and Future dates are ONLY editable if the current time is within the window
       setIsTimeLocked(!isWithinWindow);
     }
   };
@@ -77,8 +76,10 @@ export default function MealControlPage() {
       setCurrentUser(user);
 
       const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-      const role = profile?.role || "user";
-      setUserRole(role);
+      
+      // 🔒 ENTERPRISE ROLE OVERRIDE: 
+      // Super Admin acts as normal user. Only 'admin' (Meal Manager) controls the system.
+      setActualRole(profile?.role === "admin" ? "admin" : "user");
 
       const { data: settings } = await supabase.from("system_settings").select("meal_update_start, meal_update_end").eq("id", 1).maybeSingle();
       if (settings) {
@@ -92,7 +93,6 @@ export default function MealControlPage() {
         });
       }
 
-      // Check lock immediately after getting settings
       checkTimeLock();
 
       let { data: myMealData } = await supabase.from("daily_meals").select("*").eq("user_id", user.id).eq("date", selectedDate).maybeSingle();
@@ -131,7 +131,7 @@ export default function MealControlPage() {
         setMonthStats({ lunch: mLunch, dinner: mDinner, breakfast: mBreak });
       }
 
-      if (role !== "user") {
+      if (profile?.role === "admin") {
         const { data: profiles } = await supabase.from("profiles").select("id, full_name, room_number");
         const { data: mealsDate } = await supabase.from("daily_meals").select("*").eq("date", selectedDate);
         
@@ -169,6 +169,7 @@ export default function MealControlPage() {
     }
   };
 
+  // 🚀 PREMIUM MEAL TOGGLE LOGIC
   const applyPreset = (preset: "full_on" | "full_off" | "only_lunch" | "only_dinner") => {
     if (myMeal.is_locked || isTimeLocked) return toast.error("System is locked right now.");
     if (preset === "full_on") setMyMeal(prev => ({ ...prev, lunch: 1, dinner: 1, breakfast: 0.5 }));
@@ -205,11 +206,12 @@ export default function MealControlPage() {
     }
   };
 
+  // 🚀 UNLOCK REQUEST LOGIC (BEAUTIFUL MESSAGE SENDER)
   const handleUnlockRequest = async () => {
-    const toastId = toast.loading("Sending Request...");
+    const toastId = toast.loading("Sending urgent request to Manager...");
     try {
       await supabase.from("daily_meals").update({ unlock_requested: true }).eq("user_id", currentUser.id).eq("date", selectedDate);
-      toast.success("Unlock Request Sent to Manager!", { id: toastId });
+      toast.success("Alert sent! The Manager has been notified.", { id: toastId, duration: 4000 });
       setMyMeal(prev => ({ ...prev, unlock_requested: true }));
     } catch (error) {
       toast.error("Request failed.", { id: toastId });
@@ -218,8 +220,7 @@ export default function MealControlPage() {
 
   const updateTimeWindow = async (e: React.FormEvent) => {
     e.preventDefault();
-    // 🔒 RESTRICTED: Only Super Admin (Main Meal Manager) can update the time window
-    if (userRole !== "super_admin") return toast.error("Only the Main Meal Manager can change system limits.");
+    if (actualRole !== "admin") return toast.error("Only the Meal Manager can change system limits.");
     
     const toastId = toast.loading("Updating Global Configuration...");
     try {
@@ -231,20 +232,29 @@ export default function MealControlPage() {
     }
   };
 
+  // 🚀 ADMIN ACTION: Handles Unlocking and auto-resetting the request
   const handleAdminAction = async (userId: string, field: string, value: any) => {
     try {
       const uMeal = allMeals.find(m => m.user_id === userId);
+      
+      // If Admin unlocks, also reset the unlock_requested flag automatically
+      let unlockReset = {};
+      if (field === 'is_locked' && value === false) {
+        unlockReset = { unlock_requested: false };
+      }
+
       await supabase.from("daily_meals").upsert({ 
         user_id: userId, date: selectedDate,
         breakfast: uMeal.breakfast, lunch: uMeal.lunch, dinner: uMeal.dinner,
         guest_lunch: uMeal.guest_lunch, guest_dinner: uMeal.guest_dinner,
         is_locked: uMeal.is_locked, unlock_requested: uMeal.unlock_requested,
-        [field]: value 
+        [field]: value,
+        ...unlockReset
       }, { onConflict: 'user_id, date' });
       
       setAllMeals(allMeals.map(m => {
         if (m.user_id === userId) {
-          const updated = { ...m, [field]: value };
+          const updated = { ...m, [field]: value, ...unlockReset };
           updated.isActive = (updated.lunch > 0 || updated.dinner > 0 || updated.breakfast > 0);
           return updated;
         }
@@ -252,7 +262,7 @@ export default function MealControlPage() {
       }));
       
       if (field === 'is_locked' && value === false) {
-        toast.success("Meal Unlocked Successfully by Admin.");
+        toast.success("Meal Unlocked! Border can now edit their meal.", { icon: '🔓' });
       }
     } catch (error) {
       toast.error("Admin action failed.");
@@ -276,6 +286,9 @@ export default function MealControlPage() {
   const mealRate = totalMealsMonth > 0 ? (totalBazaar / totalMealsMonth).toFixed(2) : "0.00";
   const myTotalToday = Number(myMeal.lunch) + Number(myMeal.dinner) + Number(myMeal.breakfast) + Number(myMeal.guest_lunch) + Number(myMeal.guest_dinner);
 
+  // Notification Array for Admin
+  const unlockRequests = allMeals.filter(m => m.unlock_requested && m.is_locked);
+
   if (loading) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4">
@@ -298,7 +311,10 @@ export default function MealControlPage() {
       {/* 🗓️ Date & Time Lock Banner */}
       <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-3xl p-5 md:p-6 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-xl shadow-indigo-500/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-5 transition-all">
         <div>
-          <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Meal Controller</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Meal Controller</h2>
+            {actualRole === "admin" && <span className="px-2 py-1 bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400 text-[9px] font-black uppercase rounded shadow-sm border border-indigo-200 dark:border-indigo-500/30 animate-pulse">Manager Config</span>}
+          </div>
           <p className="text-slate-500 dark:text-slate-400 text-[10px] md:text-[11px] font-bold mt-1.5 uppercase tracking-widest flex items-center gap-2">
             Update Window: 
             <span className="px-2.5 py-1 bg-indigo-100/80 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 rounded-lg shadow-sm">
@@ -307,7 +323,6 @@ export default function MealControlPage() {
           </p>
         </div>
         
-        {/* Strict Status Indicator */}
         <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
           {isTimeLocked ? (
             <div className="px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-600 dark:text-rose-400">
@@ -343,14 +358,14 @@ export default function MealControlPage() {
         ============================================= */}
         <div className="lg:col-span-1 space-y-6 sm:space-y-8">
           
-          {/* User Meal Switch Card */}
+          {/* 🚀 UPGRADED: User Meal Switch Card */}
           <div className={`bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-6 md:p-8 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl relative overflow-hidden group transition-all duration-500 ${isTimeLocked ? 'opacity-90 grayscale-[10%]' : ''}`}>
             
             <div className="flex justify-between items-start mb-8">
               <div>
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Selected Date Meal</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1.5">
-                  Total Booked: <span className="text-indigo-600 dark:text-indigo-400 text-sm bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md ml-1">{myTotalToday.toFixed(1)}</span> portions
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">My Daily Meal</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1.5 flex items-center gap-1.5">
+                  Today's Booked: <span className="bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-md shadow-sm font-black">{myTotalToday.toFixed(1)}</span>
                 </p>
               </div>
               
@@ -365,66 +380,82 @@ export default function MealControlPage() {
                   </span>
                 ) : (
                   <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-emerald-200 dark:border-emerald-500/30 flex items-center gap-1 animate-pulse">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Active
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Editable
                   </span>
                 )}
               </div>
             </div>
 
-            {/* PRESET BUTTONS */}
+            {/* 🚀 PREMIUM PRESET BUTTONS (Segmented Controller Style) */}
             <div className={`space-y-4 transition-opacity duration-300 ${myMeal.is_locked || isTimeLocked ? 'opacity-50 pointer-events-none' : ''}`}>
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <button onClick={() => applyPreset('full_on')} className={`cursor-pointer py-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95 ${myMeal.lunch > 0 && myMeal.dinner > 0 ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-500/20 shadow-md' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 text-slate-600 dark:text-slate-300'}`}>
-                  <span className="text-xl mb-1.5">🟢</span>
-                  <span className="text-[11px] font-black uppercase tracking-wide">Full ON (2.5)</span>
+                <button onClick={() => applyPreset('full_on')} className={`cursor-pointer p-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:shadow-lg active:scale-95 relative overflow-hidden ${myMeal.lunch > 0 && myMeal.dinner > 0 ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-500/30' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700 hover:border-indigo-400 text-slate-600 dark:text-slate-300'}`}>
+                  {myMeal.lunch > 0 && myMeal.dinner > 0 && <div className="absolute inset-0 bg-white/20"></div>}
+                  <span className="text-2xl mb-2">🍱</span>
+                  <span className="text-[11px] font-black uppercase tracking-widest z-10">Full ON</span>
+                  <span className="text-[9px] font-bold opacity-80 mt-0.5 z-10">2.5 Portions</span>
                 </button>
-                <button onClick={() => applyPreset('full_off')} className={`cursor-pointer py-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95 ${myMeal.lunch === 0 && myMeal.dinner === 0 && myMeal.breakfast === 0 ? 'bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-500/20 shadow-md' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-500/50 text-slate-600 dark:text-slate-300'}`}>
-                  <span className="text-xl mb-1.5">🔴</span>
-                  <span className="text-[11px] font-black uppercase tracking-wide">Full OFF (0)</span>
+                <button onClick={() => applyPreset('full_off')} className={`cursor-pointer p-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:shadow-lg active:scale-95 relative overflow-hidden ${myMeal.lunch === 0 && myMeal.dinner === 0 && myMeal.breakfast === 0 ? 'bg-rose-500 border-rose-500 text-white shadow-rose-500/30' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700 hover:border-rose-400 text-slate-600 dark:text-slate-300'}`}>
+                  {myMeal.lunch === 0 && myMeal.dinner === 0 && myMeal.breakfast === 0 && <div className="absolute inset-0 bg-white/20"></div>}
+                  <span className="text-2xl mb-2">🚫</span>
+                  <span className="text-[11px] font-black uppercase tracking-widest z-10">Full OFF</span>
+                  <span className="text-[9px] font-bold opacity-80 mt-0.5 z-10">0 Portions</span>
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <button onClick={() => applyPreset('only_lunch')} className={`cursor-pointer py-3.5 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${myMeal.lunch > 0 && myMeal.dinner === 0 ? 'bg-amber-50 border-amber-500 text-amber-700 dark:bg-amber-500/20' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-amber-300 dark:hover:border-amber-500/50'}`}>
-                  <span className="text-[10px] font-black uppercase tracking-wider">Day / Lunch</span>
+                <button onClick={() => applyPreset('only_lunch')} className={`cursor-pointer py-3.5 flex flex-col items-center justify-center rounded-xl border-2 transition-all duration-300 hover:shadow-md active:scale-95 ${myMeal.lunch > 0 && myMeal.dinner === 0 ? 'bg-amber-100 border-amber-400 text-amber-700 dark:bg-amber-500/20 dark:border-amber-500/50 dark:text-amber-400 shadow-inner' : 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-amber-300'}`}>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Only Lunch (1.5)</span>
                 </button>
-                <button onClick={() => applyPreset('only_dinner')} className={`cursor-pointer py-3.5 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${myMeal.dinner > 0 && myMeal.lunch === 0 ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-500/20' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-purple-300 dark:hover:border-purple-500/50'}`}>
-                  <span className="text-[10px] font-black uppercase tracking-wider">Night / Dinner</span>
+                <button onClick={() => applyPreset('only_dinner')} className={`cursor-pointer py-3.5 flex flex-col items-center justify-center rounded-xl border-2 transition-all duration-300 hover:shadow-md active:scale-95 ${myMeal.dinner > 0 && myMeal.lunch === 0 ? 'bg-purple-100 border-purple-400 text-purple-700 dark:bg-purple-500/20 dark:border-purple-500/50 dark:text-purple-400 shadow-inner' : 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-purple-300'}`}>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Only Dinner (1.5)</span>
                 </button>
               </div>
 
               {/* Guest Meals Section */}
-              <div className="pt-6 border-t border-slate-100 dark:border-slate-700/50 space-y-4">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center flex items-center justify-center gap-2">
-                  <span className="w-4 h-[1px] bg-slate-200 dark:bg-slate-700"></span> Add Guest Meals <span className="w-4 h-[1px] bg-slate-200 dark:bg-slate-700"></span>
-                </p>
-                {['guest_lunch', 'guest_dinner'].map((gMeal) => (
-                  <div key={gMeal} className="flex items-center justify-between p-3.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md">
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide pl-1">{gMeal.replace('_', ' ')}</span>
-                    <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm pointer-events-auto">
-                      <button onClick={() => adjustGuestMeal(gMeal as any, -0.5)} className="cursor-pointer w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/20 font-black text-slate-500 hover:text-rose-500 transition-colors active:scale-90">-</button>
-                      <span className="w-8 text-center font-black text-sm text-indigo-600 dark:text-indigo-400">{myMeal[gMeal as keyof typeof myMeal]}</span>
-                      <button onClick={() => adjustGuestMeal(gMeal as any, 0.5)} className="cursor-pointer w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/20 font-black text-slate-500 hover:text-emerald-500 transition-colors active:scale-90">+</button>
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-700/50 space-y-3">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Add Guest Meals</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {['guest_lunch', 'guest_dinner'].map((gMeal) => (
+                    <div key={gMeal} className="flex flex-col items-center p-3 bg-slate-50/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md">
+                      <span className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">{gMeal.replace('_', ' ')}</span>
+                      <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-inner pointer-events-auto">
+                        <button onClick={() => adjustGuestMeal(gMeal as any, -0.5)} className="cursor-pointer w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-500/20 font-black text-slate-600 hover:text-rose-600 transition-colors active:scale-90">-</button>
+                        <span className="w-6 text-center font-black text-sm text-indigo-600 dark:text-indigo-400">{myMeal[gMeal as keyof typeof myMeal]}</span>
+                        <button onClick={() => adjustGuestMeal(gMeal as any, 0.5)} className="cursor-pointer w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-500/20 font-black text-slate-600 hover:text-emerald-600 transition-colors active:scale-90">+</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* ACTION BUTTONS */}
-            <div className="pt-8">
+            {/* 🚀 ACTION BUTTONS & UNLOCK REQUEST SYSTEM */}
+            <div className="pt-6">
               {(!myMeal.is_locked && !isTimeLocked) ? (
-                <button onClick={handleSaveMeal} disabled={actionLoading} className="cursor-pointer w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black uppercase tracking-widest rounded-2xl text-sm transition-all duration-300 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-1 active:scale-[0.98] disabled:opacity-70 disabled:hover:translate-y-0 flex justify-center items-center gap-2">
-                  {actionLoading ? "Securing..." : "Save & Lock Selection"}
-                  {!actionLoading && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
+                <button onClick={handleSaveMeal} disabled={actionLoading} className="cursor-pointer w-full py-4.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-black uppercase tracking-widest rounded-2xl text-xs transition-all duration-300 shadow-xl shadow-slate-900/20 dark:shadow-indigo-500/30 active:scale-95 disabled:opacity-70 flex justify-center items-center gap-2 border border-slate-800 dark:border-indigo-400/50">
+                  {actionLoading ? "Processing..." : "Save & Lock My Meal"}
+                  {!actionLoading && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                 </button>
               ) : myMeal.unlock_requested ? (
-                <div className="w-full py-4 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black uppercase tracking-widest rounded-2xl text-xs text-center border border-amber-200 dark:border-amber-500/20 flex items-center justify-center gap-2 animate-pulse">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Manager Approval Pending
+                <div className="w-full p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-2xl text-center shadow-inner">
+                  <span className="inline-block w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-500 mb-2 flex items-center justify-center mx-auto animate-bounce"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></span>
+                  <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Urgent Message Sent</p>
+                  <p className="text-[9px] font-bold text-amber-500/80 mt-1">Waiting for Manager to review and unlock.</p>
                 </div>
               ) : (
-                <button onClick={handleUnlockRequest} className="cursor-pointer w-full py-4 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black uppercase tracking-widest rounded-2xl text-xs transition-all duration-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:shadow-md active:scale-[0.98] flex justify-center items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Request Unlock
-                </button>
+                <div className="space-y-3">
+                  <div className="p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-xl flex items-start gap-3">
+                    <span className="text-rose-500 text-lg">⚠️</span>
+                    <div>
+                      <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest">Modification Restricted</p>
+                      <p className="text-[9px] font-bold text-rose-500/80 mt-1 leading-relaxed">Made a mistake? Send an urgent alert to the Meal Manager to unlock your panel.</p>
+                    </div>
+                  </div>
+                  <button onClick={handleUnlockRequest} className="cursor-pointer w-full py-4 bg-white dark:bg-slate-800 border-2 border-rose-200 dark:border-rose-500/30 text-rose-600 dark:text-rose-400 font-black uppercase tracking-widest rounded-xl text-[10px] transition-all duration-300 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-600 hover:border-rose-500 hover:shadow-lg hover:shadow-rose-500/20 active:scale-95 flex justify-center items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg> 
+                    Send Emergency Unlock Request
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -451,7 +482,6 @@ export default function MealControlPage() {
               </div>
             </div>
             
-            {/* Chart Legend */}
             <div className="flex gap-4 mt-6">
               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#10b981]"></div><span className="text-[10px] font-bold text-slate-500 uppercase">Break</span></div>
               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#6366f1]"></div><span className="text-[10px] font-bold text-slate-500 uppercase">Lunch</span></div>
@@ -463,16 +493,57 @@ export default function MealControlPage() {
         {/* =========================================
             RIGHT COLUMN: Admin / Manager Controls
         ============================================= */}
-        {userRole !== "user" && (
+        {actualRole === "admin" && (
           <div className="lg:col-span-2 space-y-6 sm:space-y-8">
             
+            {/* 🚨 BEAUTIFUL UNLOCK REQUESTS INBOX (MANAGER ONLY) */}
+            {unlockRequests.length > 0 && (
+              <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-[2rem] p-6 md:p-8 shadow-2xl shadow-orange-500/20 text-white relative overflow-hidden animate-in fade-in slide-in-from-top-4">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div className="flex items-center gap-3 mb-6 relative z-10">
+                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl shadow-inner border border-white/30">
+                    🚨
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black tracking-tight">Emergency Unlock Requests</h3>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-100">Borders requested modification</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3 relative z-10">
+                  {unlockRequests.map(req => (
+                    <div key={req.user_id} className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:bg-white/20">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-black shadow-inner">
+                          {req.full_name?.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-black text-sm tracking-tight">{req.full_name}</p>
+                          <p className="text-[10px] font-bold text-amber-200 uppercase tracking-widest mt-0.5">Room: {req.room_number}</p>
+                        </div>
+                      </div>
+                      <div className="w-full sm:w-auto">
+                        <button 
+                          onClick={() => handleAdminAction(req.user_id, 'is_locked', false)} 
+                          className="cursor-pointer w-full sm:w-auto px-5 py-2.5 bg-white text-orange-600 hover:bg-amber-50 font-black uppercase tracking-widest text-[10px] rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                          Approve & Unlock
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Beautiful Gradient Engine Card */}
               <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-700 rounded-[2rem] p-6 md:p-8 shadow-2xl shadow-indigo-500/20 relative overflow-hidden text-white group transition-all hover:shadow-indigo-500/40 hover:-translate-y-1">
                 <div className="absolute -right-10 -top-10 w-48 h-48 bg-white opacity-10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
                 <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 delay-100"></div>
                 
-                <h3 className="text-indigo-100 text-[10px] md:text-xs font-black uppercase tracking-widest mb-8 flex items-center gap-2">
+                <h3 className="text-indigo-100 text-[10px] md:text-xs font-black uppercase tracking-widest mb-8 flex items-center gap-2 relative z-10">
                   <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> Live Meal Engine
                 </h3>
                 <div className="flex items-end gap-6 relative z-10">
@@ -497,38 +568,31 @@ export default function MealControlPage() {
                 </div>
               </div>
 
-              {/* Time Settings Card - ONLY FOR SUPER ADMIN (Meal Manager) */}
-              {userRole === "super_admin" ? (
-                <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 shadow-xl border border-white/50 dark:border-slate-700/50 flex flex-col justify-center">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </div>
-                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Time Window Lock</h3>
+              {/* Time Settings Card - ADMIN ONLY */}
+              <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 shadow-xl border border-white/50 dark:border-slate-700/50 flex flex-col justify-center">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </div>
-                  <p className="text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 font-bold mb-6">Set active hours. System will STRICTLY lock outside this time.</p>
-                  <form onSubmit={updateTimeWindow} className="space-y-5">
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Open Time</label>
-                        <input type="time" value={timeWindow.start} onChange={e => setTimeWindow({...timeWindow, start: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
-                      </div>
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Close Time</label>
-                        <input type="time" value={timeWindow.end} onChange={e => setTimeWindow({...timeWindow, end: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
-                      </div>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Time Window Config</h3>
+                </div>
+                <p className="text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 font-bold mb-6 leading-relaxed">Set active hours. Normal users will be STRICTLY locked outside this time.</p>
+                <form onSubmit={updateTimeWindow} className="space-y-5">
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Open Time</label>
+                      <input type="time" value={timeWindow.start} onChange={e => setTimeWindow({...timeWindow, start: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer shadow-inner" />
                     </div>
-                    <button type="submit" className="cursor-pointer w-full py-3.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95">Save Lock Config</button>
-                  </form>
-                </div>
-              ) : (
-                // IF REGULAR ADMIN, SHOW A RESTRICTED CARD
-                <div className="bg-slate-50 dark:bg-slate-900/40 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 shadow-inner border border-slate-200/50 dark:border-slate-800/50 flex flex-col justify-center items-center text-center opacity-80">
-                  <div className="w-16 h-16 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center text-3xl mb-4">🛡️</div>
-                  <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Time Config Locked</h3>
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-2">Only the Main Meal Manager can modify the system active hours.</p>
-                </div>
-              )}
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Close Time</label>
+                      <input type="time" value={timeWindow.end} onChange={e => setTimeWindow({...timeWindow, end: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer shadow-inner" />
+                    </div>
+                  </div>
+                  <button type="submit" className="cursor-pointer w-full py-4 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-black text-[11px] uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 border border-slate-800 dark:border-indigo-400/50">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg> Save Configuration
+                  </button>
+                </form>
+              </div>
             </div>
 
             {/* Quick Admin Stats Row */}
@@ -566,7 +630,7 @@ export default function MealControlPage() {
                   <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">{totalDinnerPortions.toFixed(1)} <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">pcs</span></p>
                 </div>
                 <div className="bg-indigo-50/80 dark:bg-indigo-500/10 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-500/20 transition-transform hover:scale-[1.03]">
-                  <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Full Meals (2.5)</p>
+                  <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Full Meals</p>
                   <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">{totalFullMealsCount} <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">heads</span></p>
                 </div>
                 <div className="bg-rose-50/80 dark:bg-rose-500/10 p-5 rounded-2xl border border-rose-100 dark:border-rose-500/20 transition-transform hover:scale-[1.03]">
@@ -662,7 +726,7 @@ export default function MealControlPage() {
                             </button>
                             {m.unlock_requested && m.is_locked && (
                               <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-1 animate-pulse bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-md border border-amber-100 dark:border-amber-500/20">
-                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Requesting
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Unlock Req
                               </span>
                             )}
                           </div>
