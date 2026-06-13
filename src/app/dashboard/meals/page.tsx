@@ -254,7 +254,6 @@ export default function MealControlPage() {
     }
   };
 
-  // --- NEW: MISSING VARIABLES DECLARED HERE ---
   const activeBordersCount = allMeals.filter(m => m.isActive).length;
   const inactiveBordersCount = allMeals.length - activeBordersCount;
   
@@ -264,7 +263,6 @@ export default function MealControlPage() {
   
   const totalFullMealsCount = allMeals.filter(m => Number(m.lunch) === 1 && Number(m.dinner) === 1).length;
   const totalOneHalfMealsCount = allMeals.filter(m => (Number(m.lunch) === 1 && Number(m.dinner) === 0) || (Number(m.lunch) === 0 && Number(m.dinner) === 1)).length;
-  // --------------------------------------------
 
   const chartTotal = monthStats.lunch + monthStats.dinner + monthStats.breakfast;
   const lPct = chartTotal > 0 ? (monthStats.lunch / chartTotal) * 100 : 0;
@@ -273,279 +271,367 @@ export default function MealControlPage() {
   const mealRate = totalMealsMonth > 0 ? (totalBazaar / totalMealsMonth).toFixed(2) : "0.00";
   const myTotalToday = Number(myMeal.lunch) + Number(myMeal.dinner) + Number(myMeal.breakfast) + Number(myMeal.guest_lunch) + Number(myMeal.guest_dinner);
 
-  return (
-    <div className="relative min-h-[80vh] w-full max-w-7xl mx-auto space-y-6 animate-fade-in z-0 pb-10">
-      
-      {/* Background Glowing Blobs */}
-      <div className="fixed top-20 left-10 w-96 h-96 bg-indigo-500/20 rounded-full filter blur-3xl opacity-50 pointer-events-none -z-10"></div>
-      <div className="fixed top-40 right-10 w-96 h-96 bg-purple-500/20 rounded-full filter blur-3xl opacity-50 pointer-events-none -z-10"></div>
+  if (loading) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-4 border-indigo-100 dark:border-slate-800"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+        </div>
+        <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest animate-pulse">Syncing Database...</p>
+      </div>
+    );
+  }
 
-      {/* Date & Time Lock Banner */}
-      <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-5 md:p-6 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl flex flex-col sm:flex-row justify-between items-center gap-4 transition-all">
+  return (
+    <div className="relative min-h-[80vh] w-full max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in z-0 pb-10">
+      
+      {/* 🌟 Premium Background Glowing Blobs */}
+      <div className="fixed top-20 left-10 w-72 md:w-96 h-72 md:h-96 bg-indigo-500/10 dark:bg-indigo-500/20 rounded-full filter blur-[100px] pointer-events-none -z-10"></div>
+      <div className="fixed bottom-40 right-10 w-72 md:w-96 h-72 md:h-96 bg-purple-500/10 dark:bg-purple-500/20 rounded-full filter blur-[100px] pointer-events-none -z-10"></div>
+
+      {/* 🗓️ Date & Time Lock Banner */}
+      <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-3xl p-5 md:p-6 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-xl shadow-indigo-500/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-5 transition-all">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-rose-500">Meal Controller</h2>
-          <p className="text-slate-500 dark:text-slate-400 text-[11px] font-bold mt-1 uppercase tracking-widest flex items-center gap-2">
-            Update Window: <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 rounded-md">{timeWindow.start} to {timeWindow.end}</span>
+          <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Meal Controller</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-[10px] md:text-[11px] font-bold mt-1.5 uppercase tracking-widest flex items-center gap-2">
+            Update Window: 
+            <span className="px-2.5 py-1 bg-indigo-100/80 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 rounded-lg shadow-sm">
+              {timeWindow.start} to {timeWindow.end}
+            </span>
           </p>
         </div>
-        <input 
-          type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} 
-          className="w-full sm:w-auto px-5 py-3 text-sm font-black bg-white dark:bg-slate-900 border-2 border-indigo-100 dark:border-slate-700 rounded-2xl outline-none focus:border-indigo-500 text-slate-800 dark:text-slate-200 shadow-sm cursor-pointer"
-        />
+        <div className="w-full sm:w-auto relative group">
+          <input 
+            type="date" 
+            value={selectedDate} 
+            onChange={(e) => setSelectedDate(e.target.value)} 
+            className="w-full sm:w-auto px-5 py-3.5 text-sm font-black bg-white dark:bg-slate-800 border-2 border-indigo-50 dark:border-slate-700 rounded-2xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-800 dark:text-slate-200 shadow-sm cursor-pointer transition-all hover:border-indigo-200 dark:hover:border-slate-600 appearance-none"
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         
-        {/* LEFT: User Personal Form & Graph */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-6 md:p-8 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl relative overflow-hidden">
+        {/* =========================================
+            LEFT COLUMN: User Personal Form & Graph
+        ============================================= */}
+        <div className="lg:col-span-1 space-y-6 sm:space-y-8">
+          
+          {/* User Meal Switch Card */}
+          <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-6 md:p-8 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl relative overflow-hidden group">
             
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-start mb-8">
               <div>
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Today's Meal Switch</h3>
-                <p className="text-[10px] text-slate-500 font-bold mt-1">Total Booked: <span className="text-indigo-600 dark:text-indigo-400 text-sm">{myTotalToday.toFixed(1)}</span> portions</p>
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Today's Selection</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1.5">
+                  Total Booked: <span className="text-indigo-600 dark:text-indigo-400 text-sm bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md ml-1">{myTotalToday.toFixed(1)}</span> portions
+                </p>
               </div>
               
               <div className="flex flex-col items-end gap-1">
                 {myMeal.is_locked ? (
-                  <span className="px-3 py-1.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase shadow-sm border border-slate-200 dark:border-slate-700">
-                    Status Locked
+                  <span className="px-3 py-1.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> Locked
                   </span>
                 ) : isTimeLocked ? (
-                  <span className="px-3 py-1.5 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-amber-200 dark:border-amber-500/30">
-                    Time Over
+                  <span className="px-3 py-1.5 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-amber-200 dark:border-amber-500/30 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Time Over
                   </span>
                 ) : (
-                  <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-emerald-200 dark:border-emerald-500/30">
-                    Open to Edit
+                  <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-emerald-200 dark:border-emerald-500/30 flex items-center gap-1 animate-pulse">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Open
                   </span>
                 )}
               </div>
             </div>
 
-            {/* MEAL CONTROLS */}
-            <div className={`space-y-4 ${myMeal.is_locked || isTimeLocked ? 'opacity-60 pointer-events-none' : ''}`}>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => applyPreset('full_on')} className={`py-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all ${myMeal.lunch > 0 && myMeal.dinner > 0 ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-500/20' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700 hover:border-indigo-300'}`}>
-                  <span className="text-lg mb-1">🟢</span>
-                  <span className="text-xs font-black uppercase">Full ON (2.5)</span>
+            {/* PRESET BUTTONS */}
+            <div className={`space-y-4 transition-opacity duration-300 ${myMeal.is_locked || isTimeLocked ? 'opacity-50 pointer-events-none grayscale-[30%]' : ''}`}>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <button onClick={() => applyPreset('full_on')} className={`cursor-pointer py-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95 ${myMeal.lunch > 0 && myMeal.dinner > 0 ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-500/20 shadow-md' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 text-slate-600 dark:text-slate-300'}`}>
+                  <span className="text-xl mb-1.5">🟢</span>
+                  <span className="text-[11px] font-black uppercase tracking-wide">Full ON (2.5)</span>
                 </button>
-                <button onClick={() => applyPreset('full_off')} className={`py-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all ${myMeal.lunch === 0 && myMeal.dinner === 0 && myMeal.breakfast === 0 ? 'bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-500/20' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700 hover:border-rose-300'}`}>
-                  <span className="text-lg mb-1">🔴</span>
-                  <span className="text-xs font-black uppercase">Full OFF (0)</span>
+                <button onClick={() => applyPreset('full_off')} className={`cursor-pointer py-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95 ${myMeal.lunch === 0 && myMeal.dinner === 0 && myMeal.breakfast === 0 ? 'bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-500/20 shadow-md' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-500/50 text-slate-600 dark:text-slate-300'}`}>
+                  <span className="text-xl mb-1.5">🔴</span>
+                  <span className="text-[11px] font-black uppercase tracking-wide">Full OFF (0)</span>
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => applyPreset('only_lunch')} className={`py-3 flex flex-col items-center justify-center rounded-2xl border transition-all ${myMeal.lunch > 0 && myMeal.dinner === 0 ? 'bg-amber-50 border-amber-500 text-amber-700 dark:bg-amber-500/20' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
-                  <span className="text-[10px] font-black uppercase">Day / Lunch (1.5)</span>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <button onClick={() => applyPreset('only_lunch')} className={`cursor-pointer py-3.5 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${myMeal.lunch > 0 && myMeal.dinner === 0 ? 'bg-amber-50 border-amber-500 text-amber-700 dark:bg-amber-500/20' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-amber-300 dark:hover:border-amber-500/50'}`}>
+                  <span className="text-[10px] font-black uppercase tracking-wider">Day / Lunch</span>
                 </button>
-                <button onClick={() => applyPreset('only_dinner')} className={`py-3 flex flex-col items-center justify-center rounded-2xl border transition-all ${myMeal.dinner > 0 && myMeal.lunch === 0 ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-500/20' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
-                  <span className="text-[10px] font-black uppercase">Night / Dinner (1.5)</span>
+                <button onClick={() => applyPreset('only_dinner')} className={`cursor-pointer py-3.5 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:scale-95 ${myMeal.dinner > 0 && myMeal.lunch === 0 ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-500/20' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-purple-300 dark:hover:border-purple-500/50'}`}>
+                  <span className="text-[10px] font-black uppercase tracking-wider">Night / Dinner</span>
                 </button>
               </div>
 
-              {/* Guest Meals */}
-              <div className="pt-4 border-t border-slate-200/50 dark:border-slate-700/50 space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Add Guest Meals</p>
+              {/* Guest Meals Section */}
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-700/50 space-y-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center flex items-center justify-center gap-2">
+                  <span className="w-4 h-[1px] bg-slate-200 dark:bg-slate-700"></span> Add Guest Meals <span className="w-4 h-[1px] bg-slate-200 dark:bg-slate-700"></span>
+                </p>
                 {['guest_lunch', 'guest_dinner'].map((gMeal) => (
-                  <div key={gMeal} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase pl-2">{gMeal.replace('_', ' ')}</span>
-                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl pointer-events-auto">
-                      <button onClick={() => adjustGuestMeal(gMeal as any, -0.5)} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 rounded-lg shadow-sm font-black text-slate-600 hover:text-rose-500">-</button>
-                      <span className="w-8 text-center font-black text-sm text-orange-500">{myMeal[gMeal as keyof typeof myMeal]}</span>
-                      <button onClick={() => adjustGuestMeal(gMeal as any, 0.5)} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 rounded-lg shadow-sm font-black text-slate-600 hover:text-emerald-500">+</button>
+                  <div key={gMeal} className="flex items-center justify-between p-3.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md">
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide pl-1">{gMeal.replace('_', ' ')}</span>
+                    <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm pointer-events-auto">
+                      <button onClick={() => adjustGuestMeal(gMeal as any, -0.5)} className="cursor-pointer w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/20 font-black text-slate-500 hover:text-rose-500 transition-colors active:scale-90">-</button>
+                      <span className="w-8 text-center font-black text-sm text-indigo-600 dark:text-indigo-400">{myMeal[gMeal as keyof typeof myMeal]}</span>
+                      <button onClick={() => adjustGuestMeal(gMeal as any, 0.5)} className="cursor-pointer w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/20 font-black text-slate-500 hover:text-emerald-500 transition-colors active:scale-90">+</button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="pt-6">
+            {/* ACTION BUTTONS */}
+            <div className="pt-8">
               {(!myMeal.is_locked && !isTimeLocked) ? (
-                <button onClick={handleSaveMeal} disabled={actionLoading} className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black uppercase tracking-widest rounded-2xl text-sm transition-all shadow-xl hover:scale-[1.02] active:scale-[0.98]">
-                  Save & Lock Selection
+                <button onClick={handleSaveMeal} disabled={actionLoading} className="cursor-pointer w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black uppercase tracking-widest rounded-2xl text-sm transition-all duration-300 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-1 active:scale-[0.98] disabled:opacity-70 disabled:hover:translate-y-0 flex justify-center items-center gap-2">
+                  {actionLoading ? "Securing..." : "Save & Lock Selection"}
+                  {!actionLoading && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
                 </button>
               ) : myMeal.unlock_requested ? (
-                <div className="w-full py-4 bg-amber-50 dark:bg-amber-500/10 text-amber-600 font-black uppercase tracking-widest rounded-2xl text-sm text-center border border-amber-200 dark:border-amber-500/20 flex items-center justify-center gap-2">
-                  Manager Approval Pending
+                <div className="w-full py-4 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black uppercase tracking-widest rounded-2xl text-xs text-center border border-amber-200 dark:border-amber-500/20 flex items-center justify-center gap-2 animate-pulse">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Manager Approval Pending
                 </div>
               ) : (
-                <button onClick={handleUnlockRequest} className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black uppercase tracking-widest rounded-2xl text-sm transition-all hover:border-indigo-500 hover:text-indigo-600 active:scale-[0.98]">
-                  Request Unlock
+                <button onClick={handleUnlockRequest} className="cursor-pointer w-full py-4 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black uppercase tracking-widest rounded-2xl text-xs transition-all duration-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:shadow-md active:scale-[0.98] flex justify-center items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Request Unlock
                 </button>
               )}
             </div>
           </div>
 
-          <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-xl flex flex-col items-center">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 w-full">My Month History</h3>
-            <div className="relative w-48 h-48 drop-shadow-2xl">
+          {/* User History Circular Chart */}
+          <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-6 md:p-8 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-xl flex flex-col items-center group transition-all hover:shadow-2xl">
+            <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest w-full text-center sm:text-left mb-6 flex items-center justify-center sm:justify-start gap-2">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg> My Month History
+            </h3>
+            <div className="relative w-48 h-48 drop-shadow-2xl transition-transform duration-500 group-hover:scale-105">
               <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                <circle cx="50" cy="50" r="40" fill="transparent" stroke="#e2e8f0" strokeWidth="12" className="dark:stroke-slate-800" />
+                <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f1f5f9" strokeWidth="12" className="dark:stroke-slate-800 transition-colors" />
                 {chartTotal > 0 && (
                   <>
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#10b981" strokeWidth="12" strokeDasharray={`${bPct * 2.51} 251.2`} strokeDashoffset="0" className="transition-all duration-1000" />
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#6366f1" strokeWidth="12" strokeDasharray={`${lPct * 2.51} 251.2`} strokeDashoffset={`-${bPct * 2.51}`} className="transition-all duration-1000" />
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#a855f7" strokeWidth="12" strokeDasharray={`${dPct * 2.51} 251.2`} strokeDashoffset={`-${(bPct + lPct) * 2.51}`} className="transition-all duration-1000" />
+                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#10b981" strokeWidth="12" strokeLinecap="round" strokeDasharray={`${bPct * 2.51} 251.2`} strokeDashoffset="0" className="transition-all duration-1000 ease-out" />
+                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#6366f1" strokeWidth="12" strokeLinecap="round" strokeDasharray={`${lPct * 2.51} 251.2`} strokeDashoffset={`-${bPct * 2.51}`} className="transition-all duration-1000 ease-out" />
+                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#a855f7" strokeWidth="12" strokeLinecap="round" strokeDasharray={`${dPct * 2.51} 251.2`} strokeDashoffset={`-${(bPct + lPct) * 2.51}`} className="transition-all duration-1000 ease-out" />
                   </>
                 )}
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-black text-slate-800 dark:text-white">{chartTotal.toFixed(1)}</span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Total Meals</span>
+                <span className="text-4xl font-black text-slate-800 dark:text-white tracking-tighter">{chartTotal.toFixed(1)}</span>
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Total Meals</span>
               </div>
+            </div>
+            
+            {/* Chart Legend */}
+            <div className="flex gap-4 mt-6">
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#10b981]"></div><span className="text-[10px] font-bold text-slate-500 uppercase">Break</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#6366f1]"></div><span className="text-[10px] font-bold text-slate-500 uppercase">Lunch</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#a855f7]"></div><span className="text-[10px] font-bold text-slate-500 uppercase">Dinner</span></div>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: Manager Controls */}
+        {/* =========================================
+            RIGHT COLUMN: Admin / Manager Controls
+        ============================================= */}
         {userRole !== "user" && (
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 sm:space-y-8">
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2rem] p-6 md:p-8 shadow-2xl relative overflow-hidden text-white">
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
-                <h3 className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mb-6">Live Meal Engine</h3>
-                <div className="flex items-end gap-6">
+              {/* Beautiful Gradient Engine Card */}
+              <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-700 rounded-[2rem] p-6 md:p-8 shadow-2xl shadow-indigo-500/20 relative overflow-hidden text-white group transition-all hover:shadow-indigo-500/40 hover:-translate-y-1">
+                <div className="absolute -right-10 -top-10 w-48 h-48 bg-white opacity-10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
+                <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700 delay-100"></div>
+                
+                <h3 className="text-indigo-100 text-[10px] md:text-xs font-black uppercase tracking-widest mb-8 flex items-center gap-2">
+                  <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> Live Meal Engine
+                </h3>
+                <div className="flex items-end gap-6 relative z-10">
                   <div>
-                    <p className="text-[10px] font-bold uppercase mb-1 opacity-80">Total Expense</p>
-                    <p className="text-xl font-black">৳{totalBazaar}</p>
+                    <p className="text-[10px] font-bold uppercase mb-1 opacity-80 tracking-wider">Total Expense</p>
+                    <p className="text-xl md:text-2xl font-black">৳{totalBazaar.toLocaleString()}</p>
                   </div>
-                  <div className="text-xl font-black opacity-50">/</div>
+                  <div className="text-2xl font-black opacity-40 mb-1">/</div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase mb-1 opacity-80">Total Meals</p>
-                    <p className="text-xl font-black">{totalMealsMonth.toFixed(1)}</p>
+                    <p className="text-[10px] font-bold uppercase mb-1 opacity-80 tracking-wider">Total Meals</p>
+                    <p className="text-xl md:text-2xl font-black">{totalMealsMonth.toFixed(1)}</p>
                   </div>
                 </div>
-                <div className="mt-6 pt-6 border-t border-white/20">
-                  <p className="text-[10px] font-bold uppercase mb-1 opacity-80">Current Meal Rate</p>
-                  <p className="text-4xl font-black">৳ {mealRate}</p>
+                <div className="mt-8 pt-6 border-t border-white/20 relative z-10 flex items-end justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase mb-1 opacity-80 tracking-wider">Current Meal Rate</p>
+                    <p className="text-4xl md:text-5xl font-black tracking-tighter">৳ {mealRate}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl rounded-[2rem] p-6 shadow-xl border border-white/50 dark:border-slate-700/50">
-                <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest mb-2">Time Window Settings</h3>
-                <p className="text-[10px] text-slate-500 font-bold mb-6">Set daily allowed hours for meal updates</p>
-                <form onSubmit={updateTimeWindow} className="space-y-4">
+              {/* Time Settings Card */}
+              <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 shadow-xl border border-white/50 dark:border-slate-700/50 flex flex-col justify-center">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Time Window</h3>
+                </div>
+                <p className="text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 font-bold mb-6">Set daily allowed hours for borders to update meals.</p>
+                <form onSubmit={updateTimeWindow} className="space-y-5">
                   <div className="flex gap-4">
                     <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Start Time</label>
-                      <input type="time" value={timeWindow.start} onChange={e => setTimeWindow({...timeWindow, start: e.target.value})} className="w-full bg-slate-100 dark:bg-slate-900 border-none rounded-xl px-3 py-2 text-sm font-bold text-slate-800 dark:text-white outline-none" />
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Start Time</label>
+                      <input type="time" value={timeWindow.start} onChange={e => setTimeWindow({...timeWindow, start: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
                     </div>
                     <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">End Time</label>
-                      <input type="time" value={timeWindow.end} onChange={e => setTimeWindow({...timeWindow, end: e.target.value})} className="w-full bg-slate-100 dark:bg-slate-900 border-none rounded-xl px-3 py-2 text-sm font-bold text-slate-800 dark:text-white outline-none" />
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">End Time</label>
+                      <input type="time" value={timeWindow.end} onChange={e => setTimeWindow({...timeWindow, end: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
                     </div>
                   </div>
-                  <button type="submit" className="w-full py-2.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-xl transition-all">Save Config</button>
+                  <button type="submit" className="cursor-pointer w-full py-3.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95">Save Config</button>
                 </form>
               </div>
             </div>
 
-            {/* Admin Stats */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-5 rounded-2xl border border-white/50 dark:border-slate-700/50 shadow-md text-center">
-                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Active Borders</p>
-                <p className="text-2xl font-black text-slate-900 dark:text-white">{activeBordersCount}</p>
+            {/* Quick Admin Stats Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-5 rounded-2xl border border-white/50 dark:border-slate-700/50 shadow-lg text-center transition-all hover:-translate-y-1 hover:shadow-xl">
+                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5">Active Borders</p>
+                <p className="text-3xl font-black text-slate-900 dark:text-white">{activeBordersCount}</p>
               </div>
-              <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-5 rounded-2xl border border-white/50 dark:border-slate-700/50 shadow-md text-center">
-                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Inactive Borders</p>
-                <p className="text-2xl font-black text-slate-900 dark:text-white">{inactiveBordersCount}</p>
+              <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-5 rounded-2xl border border-white/50 dark:border-slate-700/50 shadow-lg text-center transition-all hover:-translate-y-1 hover:shadow-xl">
+                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1.5">Inactive Borders</p>
+                <p className="text-3xl font-black text-slate-900 dark:text-white">{inactiveBordersCount}</p>
               </div>
-              <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl p-5 rounded-2xl border border-white/50 dark:border-slate-700/50 shadow-md text-center">
-                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Total Booked Portions</p>
-                <p className="text-2xl font-black text-slate-900 dark:text-white">{totalPortionsToday.toFixed(1)}</p>
-              </div>
-            </div>
-
-            {/* Live Distribution Summary */}
-            <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl rounded-[2rem] p-6 border border-white/50 dark:border-slate-700/50 shadow-xl space-y-4">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-200/50 dark:border-slate-700/50 pb-2">Live Food Distribution Summary (Selected Date)</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="bg-amber-50/50 dark:bg-amber-500/5 p-4 rounded-2xl border border-amber-100 dark:border-amber-500/10">
-                  <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Noon / Lunch</p>
-                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">{totalLunchPortions.toFixed(1)} <span className="text-xs font-normal text-slate-400">pcs</span></p>
-                </div>
-                <div className="bg-purple-50/50 dark:bg-purple-500/5 p-4 rounded-2xl border border-purple-100 dark:border-purple-500/10">
-                  <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Night / Dinner</p>
-                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">{totalDinnerPortions.toFixed(1)} <span className="text-xs font-normal text-slate-400">pcs</span></p>
-                </div>
-                <div className="bg-indigo-50/50 dark:bg-indigo-500/5 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-500/10">
-                  <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Full Meals (2.5)</p>
-                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">{totalFullMealsCount} <span className="text-xs font-normal text-slate-400">borders</span></p>
-                </div>
-                <div className="bg-rose-50/50 dark:bg-rose-500/5 p-4 rounded-2xl border border-rose-100 dark:border-rose-500/10">
-                  <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">1.5 Meals</p>
-                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-1">{totalOneHalfMealsCount} <span className="text-xs font-normal text-slate-400">borders</span></p>
-                </div>
+              <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-5 rounded-2xl border border-white/50 dark:border-slate-700/50 shadow-lg text-center transition-all hover:-translate-y-1 hover:shadow-xl">
+                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1.5">Total Booked (Today)</p>
+                <p className="text-3xl font-black text-slate-900 dark:text-white">{totalPortionsToday.toFixed(1)}</p>
               </div>
             </div>
 
-            {/* Border Registry Table */}
-            <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-2xl rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-xl overflow-hidden">
-              <div className="p-5 border-b border-slate-200/50 dark:border-slate-700/50 flex justify-between items-center bg-white/40 dark:bg-slate-800/40">
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Border Registry</h3>
+            {/* Distribution Summary Cards */}
+            <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 border border-white/50 dark:border-slate-700/50 shadow-xl space-y-6">
+              <div className="flex items-center gap-3 border-b border-slate-200/50 dark:border-slate-700/50 pb-4">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                </div>
+                <h3 className="text-xs md:text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Live Food Distribution</h3>
               </div>
               
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="bg-amber-50/80 dark:bg-amber-500/10 p-5 rounded-2xl border border-amber-100 dark:border-amber-500/20 transition-transform hover:scale-[1.03]">
+                  <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Noon / Lunch</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">{totalLunchPortions.toFixed(1)} <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">pcs</span></p>
+                </div>
+                <div className="bg-purple-50/80 dark:bg-purple-500/10 p-5 rounded-2xl border border-purple-100 dark:border-purple-500/20 transition-transform hover:scale-[1.03]">
+                  <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest">Night / Dinner</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">{totalDinnerPortions.toFixed(1)} <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">pcs</span></p>
+                </div>
+                <div className="bg-indigo-50/80 dark:bg-indigo-500/10 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-500/20 transition-transform hover:scale-[1.03]">
+                  <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Full Meals (2.5)</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">{totalFullMealsCount} <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">heads</span></p>
+                </div>
+                <div className="bg-rose-50/80 dark:bg-rose-500/10 p-5 rounded-2xl border border-rose-100 dark:border-rose-500/20 transition-transform hover:scale-[1.03]">
+                  <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest">1.5 Meals</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">{totalOneHalfMealsCount} <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">heads</span></p>
+                </div>
+              </div>
+            </div>
+
+            {/* Massive Admin Table */}
+            <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl overflow-hidden">
+              <div className="p-6 md:p-8 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/40 dark:bg-slate-800/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Border Registry</h3>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase">Manage daily status</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse min-w-[600px]">
                   <thead>
-                    <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200/50 dark:border-slate-700/50">
-                      <th className="px-5 py-4">Border Profile</th>
-                      <th className="px-5 py-4 text-center">Meals</th>
-                      <th className="px-5 py-4 text-center">Guests</th>
-                      <th className="px-5 py-4 text-right">Lock Control</th>
+                    <tr className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-slate-50/80 dark:bg-slate-800/50">
+                      <th className="px-6 py-5 border-b border-slate-200/50 dark:border-slate-700/50">Border Profile</th>
+                      <th className="px-6 py-5 border-b border-slate-200/50 dark:border-slate-700/50 text-center">Meals Setup</th>
+                      <th className="px-6 py-5 border-b border-slate-200/50 dark:border-slate-700/50 text-center">Guest Add-on</th>
+                      <th className="px-6 py-5 border-b border-slate-200/50 dark:border-slate-700/50 text-right">Lock Control</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100/50 dark:divide-slate-800/50">
                     {allMeals.map((m) => (
-                      <tr key={m.user_id} className="hover:bg-white/50 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-white shadow-md shrink-0 ${m.isActive ? 'bg-gradient-to-br from-emerald-400 to-teal-500' : 'bg-gradient-to-br from-rose-400 to-pink-500'}`}>
+                      <tr key={m.user_id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white shadow-md shrink-0 transition-transform group-hover:scale-105 ${m.isActive ? 'bg-gradient-to-br from-emerald-400 to-teal-500' : 'bg-gradient-to-br from-slate-400 to-slate-500 dark:from-slate-600 dark:to-slate-700'}`}>
                               {m.full_name?.charAt(0).toUpperCase() || "U"}
                             </div>
                             <div>
-                              <div className="font-bold text-sm text-slate-900 dark:text-slate-200 flex items-center gap-2">
+                              <div className="font-black text-sm text-slate-900 dark:text-slate-200 tracking-tight">
                                 {m.full_name} 
                               </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Room: {m.room_number || "N/A"}</span>
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">Room: {m.room_number || "N/A"}</span>
                                 {m.isActive ? (
-                                  <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 rounded text-[8px] font-black uppercase">Active</span>
+                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 rounded-md text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active
+                                  </span>
                                 ) : (
-                                  <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 rounded text-[8px] font-black uppercase">Inactive</span>
+                                  <span className="px-2 py-0.5 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-md text-[9px] font-black uppercase tracking-wider">
+                                    Inactive
+                                  </span>
                                 )}
                               </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex justify-center items-center gap-1">
-                            <span className="text-[10px] text-slate-400 font-bold uppercase">L</span>
-                            <input type="number" step="0.5" min="0" value={m.lunch} onChange={(e) => handleAdminAction(m.user_id, 'lunch', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-xs font-bold bg-slate-100 dark:bg-slate-900 border-none rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
-                            <span className="text-[10px] text-slate-400 font-bold uppercase ml-2">D</span>
-                            <input type="number" step="0.5" min="0" value={m.dinner} onChange={(e) => handleAdminAction(m.user_id, 'dinner', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-xs font-bold bg-slate-100 dark:bg-slate-900 border-none rounded-lg outline-none focus:ring-2 focus:ring-purple-500" />
+                        <td className="px-6 py-4">
+                          <div className="flex justify-center items-center gap-2">
+                            <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all">
+                              <span className="text-[10px] text-indigo-500 dark:text-indigo-400 font-black uppercase pl-2 pr-1">L</span>
+                              <input type="number" step="0.5" min="0" value={m.lunch} onChange={(e) => handleAdminAction(m.user_id, 'lunch', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-sm font-black bg-transparent border-none outline-none text-slate-800 dark:text-white cursor-pointer" />
+                            </div>
+                            <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-purple-500/50 transition-all">
+                              <span className="text-[10px] text-purple-500 dark:text-purple-400 font-black uppercase pl-2 pr-1">D</span>
+                              <input type="number" step="0.5" min="0" value={m.dinner} onChange={(e) => handleAdminAction(m.user_id, 'dinner', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-sm font-black bg-transparent border-none outline-none text-slate-800 dark:text-white cursor-pointer" />
+                            </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex justify-center items-center gap-1">
-                            <input type="number" step="0.5" min="0" value={m.guest_lunch} onChange={(e) => handleAdminAction(m.user_id, 'guest_lunch', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-xs font-bold bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-lg outline-none" />
-                            <span className="text-slate-400 font-black">/</span>
-                            <input type="number" step="0.5" min="0" value={m.guest_dinner} onChange={(e) => handleAdminAction(m.user_id, 'guest_dinner', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-xs font-bold bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-lg outline-none" />
+                        <td className="px-6 py-4">
+                          <div className="flex justify-center items-center">
+                            <div className="flex items-center bg-orange-50 dark:bg-orange-500/10 p-1.5 rounded-xl border border-orange-200 dark:border-orange-500/20 focus-within:ring-2 focus-within:ring-orange-500/50 transition-all">
+                              <input type="number" step="0.5" min="0" value={m.guest_lunch} onChange={(e) => handleAdminAction(m.user_id, 'guest_lunch', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-sm font-black bg-transparent text-orange-600 dark:text-orange-400 border-none outline-none cursor-pointer" />
+                              <span className="text-orange-300 dark:text-orange-500/50 font-black">/</span>
+                              <input type="number" step="0.5" min="0" value={m.guest_dinner} onChange={(e) => handleAdminAction(m.user_id, 'guest_dinner', Number(e.target.value))} className="w-10 px-1 py-1 text-center text-sm font-black bg-transparent text-orange-600 dark:text-orange-400 border-none outline-none cursor-pointer" />
+                            </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-right flex flex-col items-end gap-1">
-                          <button 
-                            onClick={() => handleAdminAction(m.user_id, 'is_locked', !m.is_locked)} 
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all shadow-sm ${m.is_locked ? 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-300' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 hover:bg-emerald-200'}`}
-                          >
-                            {m.is_locked ? 'Unlock' : 'Lock'}
-                          </button>
-                          {m.unlock_requested && m.is_locked && (
-                            <span className="text-[9px] font-black text-amber-500 uppercase">Req Pending</span>
-                          )}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex flex-col items-end gap-1.5">
+                            <button 
+                              onClick={() => handleAdminAction(m.user_id, 'is_locked', !m.is_locked)} 
+                              className={`cursor-pointer px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center gap-1.5 hover:shadow-md active:scale-95 ${m.is_locked ? 'bg-slate-800 text-white dark:bg-slate-700 hover:bg-slate-900' : 'bg-white border border-slate-200 dark:border-slate-600 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-indigo-500 hover:text-indigo-600'}`}
+                            >
+                              {m.is_locked ? (
+                                <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> Unlock</>
+                              ) : (
+                                <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Lock</>
+                              )}
+                            </button>
+                            {m.unlock_requested && m.is_locked && (
+                              <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-1 animate-pulse bg-amber-50 dark:bg-amber-500/10 px-2 py-1 rounded-md border border-amber-100 dark:border-amber-500/20">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Requesting
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
