@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import ThemeToggle from "../components/ThemeToggle";
 import NotificationBell from "../components/NotificationBell";
-import ProfileModal from "../components/ProfileModal"; // 🎯 Profile Modal Imported
+import ProfileModal from "../components/ProfileModal";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -34,7 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push("/login");
   };
 
-  // 🎯 Base Navigation Links (With Premium Icons Restored)
+  // 🎯 Enterprise Navigation Links
   const navItems = [
     { name: "Overview", href: "/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
     { name: "Meal Control", href: "/dashboard/meals", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
@@ -47,43 +47,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (userRole === "super_admin") {
     navItems.push({ 
-      name: "User Management", 
-      href: "/dashboard/users", 
+      name: "Border Management", 
+      href: "/dashboard/members", 
       icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" 
     });
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] flex transition-colors duration-300">
+    // 🚀 Fixed the main container using dynamic viewport height
+    <div className="h-[100dvh] bg-[#F8FAFC] dark:bg-[#0B1120] flex transition-colors duration-300 overflow-hidden">
       
       {/* 📱 Mobile Menu Overlay with Blur Animation */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity cursor-pointer animate-fade-in" 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden transition-opacity cursor-pointer animate-fade-in" 
           onClick={() => setIsMobileMenuOpen(false)}
         ></div>
       )}
 
-      {/* 🧭 Sidebar Navigation */}
-      <aside className={`fixed md:sticky top-0 left-0 z-50 w-72 h-screen bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 flex flex-col transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      {/* 🧭 Sidebar Navigation (Fixed for mobile cutoff) */}
+      <aside className={`fixed md:sticky top-0 left-0 z-50 w-72 h-[100dvh] bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800/80 flex flex-col transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
         
         {/* Brand Logo */}
-        <div className="h-20 flex items-center justify-between px-6 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
-              <span className="text-white font-black text-xl leading-none">M</span>
+        <div className="h-24 flex items-center justify-between px-6 border-b border-slate-100 dark:border-slate-800/50 shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <span className="text-white font-black text-2xl leading-none tracking-tighter">M</span>
             </div>
-            <h2 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">Mess Pro</h2>
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-none">Mess Pro</h2>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Enterprise Edition</p>
+            </div>
           </div>
           {/* Close button for Mobile */}
-          <button className="md:hidden text-slate-400 hover:text-rose-500 transition-colors cursor-pointer p-1" onClick={() => setIsMobileMenuOpen(false)}>
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button className="md:hidden text-slate-400 hover:text-rose-500 transition-colors cursor-pointer bg-slate-50 dark:bg-slate-800 p-2 rounded-xl" onClick={() => setIsMobileMenuOpen(false)}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1.5 scroll-smooth">
-          <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-4 mb-4">Main Menu</div>
+        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
+          <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-4 mb-4">Core Modules</div>
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -91,64 +95,76 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={item.name} 
                 href={item.href}
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 ease-in-out cursor-pointer hover:scale-[1.02] ${
+                className={`flex items-center gap-3.5 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 ease-in-out cursor-pointer group ${
                   isActive 
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400 shadow-sm" 
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#1E293B]"
+                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400 shadow-sm border border-indigo-100 dark:border-indigo-500/20" 
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-[#1E293B] border border-transparent"
                 }`}
               >
-                <svg className={`w-5 h-5 transition-colors duration-200 ${isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon} />
-                </svg>
-                {item.name}
+                <div className={`p-1.5 rounded-lg transition-colors ${isActive ? "bg-indigo-100 dark:bg-indigo-500/20" : "bg-slate-100 dark:bg-slate-800 group-hover:bg-slate-200 dark:group-hover:bg-slate-700"}`}>
+                  <svg className={`w-4 h-4 transition-colors duration-200 ${isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d={item.icon} />
+                  </svg>
+                </div>
+                <span className="tracking-wide">{item.name}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* User Logout Button */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800">
+        {/* 🚀 User Logout Button (Fixed with extra padding for mobile bottom bar) */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800/50 pb-8 md:pb-4 shrink-0 bg-white dark:bg-[#0F172A]">
           <button 
             onClick={handleSignOut}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 transition-all duration-200 cursor-pointer"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl font-black uppercase tracking-widest text-[11px] text-slate-600 dark:text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 transition-all duration-200 cursor-pointer border border-transparent hover:border-rose-100 dark:hover:border-rose-500/20 active:scale-95"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Sign Out
+            Secure Sign Out
           </button>
         </div>
       </aside>
 
       {/* 🖥️ Main Content Area */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative">
         
         {/* 🔝 Top Header */}
-        <header className="h-20 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-10 z-30 transition-colors duration-300">
+        <header className="h-24 bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between px-6 lg:px-10 z-30 transition-colors duration-300 shrink-0">
           
           <div className="flex items-center gap-4">
             {/* Hamburger Icon for Mobile */}
             <button 
-              className="md:hidden p-2 -ml-2 text-slate-600 dark:text-slate-300 cursor-pointer rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" 
+              className="md:hidden p-2.5 -ml-2 text-slate-600 dark:text-slate-300 cursor-pointer rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-sm" 
               onClick={() => setIsMobileMenuOpen(true)}
             >
-              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h8" />
               </svg>
             </button>
-            <h2 className="text-xl font-black text-slate-800 dark:text-slate-200 hidden sm:block tracking-tight">Dashboard</h2>
+            
+            {/* Dynamic Page Title */}
+            <div>
+              <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 hidden sm:block tracking-tight">
+                {navItems.find(item => item.href === pathname)?.name || "Dashboard"}
+              </h2>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:block mt-0.5">Workspace Management</p>
+            </div>
           </div>
           
           {/* 🎯 Action Bar: Notification, Theme, and Profile Modal */}
-          <div className="flex items-center gap-2 sm:gap-4">
-            {userId && <NotificationBell userId={userId} />}
-            <ThemeToggle />
-            <ProfileModal /> {/* 🎯 Modal imported and placed perfectly */}
+          <div className="flex items-center gap-3 sm:gap-5">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded-2xl flex items-center gap-2 border border-slate-200 dark:border-slate-700">
+              {userId && <NotificationBell userId={userId} />}
+              <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
+              <ThemeToggle />
+            </div>
+            <ProfileModal />
           </div>
         </header>
 
         {/* 📄 Dynamic Page Content with smooth load animation */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 scroll-smooth animate-fade-in">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 scroll-smooth custom-scrollbar animate-fade-in relative z-0">
           {children}
         </main>
       </div>

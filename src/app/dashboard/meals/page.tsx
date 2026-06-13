@@ -21,7 +21,7 @@ export default function MealControlPage() {
 
   // System Settings for Time Window
   const [timeWindow, setTimeWindow] = useState({ start: "20:00", end: "22:00" });
-  const [isTimeLocked, setIsTimeLocked] = useState(false);
+  const [isTimeLocked, setIsTimeLocked] = useState(true); // Default to locked
 
   // User's Personal Meal State
   const [myMeal, setMyMeal] = useState({ 
@@ -43,9 +43,10 @@ export default function MealControlPage() {
     fetchData();
   }, [selectedDate]);
 
+  // 🎯 STRICT TIME LOCK ENGINE (Checks every 30 seconds)
   useEffect(() => {
     checkTimeLock();
-    const interval = setInterval(checkTimeLock, 60000);
+    const interval = setInterval(checkTimeLock, 30000);
     return () => clearInterval(interval);
   }, [selectedDate, timeWindow]);
 
@@ -53,16 +54,15 @@ export default function MealControlPage() {
     const now = new Date();
     const currentString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
-    if (selectedDate === realTimeToday) {
-      if (currentString >= timeWindow.start && currentString <= timeWindow.end) {
-        setIsTimeLocked(false);
-      } else {
-        setIsTimeLocked(true);
-      }
-    } else if (selectedDate < realTimeToday) {
+    // 🔒 STRICT RULE: Current time MUST be within the start and end time window.
+    const isWithinWindow = currentString >= timeWindow.start && currentString <= timeWindow.end;
+    
+    if (selectedDate < realTimeToday) {
+      // Past dates are ALWAYS locked
       setIsTimeLocked(true);
     } else {
-      setIsTimeLocked(false);
+      // Today and Future dates are ONLY editable if the current time is within the window
+      setIsTimeLocked(!isWithinWindow);
     }
   };
 
@@ -91,6 +91,9 @@ export default function MealControlPage() {
           return prev;
         });
       }
+
+      // Check lock immediately after getting settings
+      checkTimeLock();
 
       let { data: myMealData } = await supabase.from("daily_meals").select("*").eq("user_id", user.id).eq("date", selectedDate).maybeSingle();
       
@@ -167,7 +170,7 @@ export default function MealControlPage() {
   };
 
   const applyPreset = (preset: "full_on" | "full_off" | "only_lunch" | "only_dinner") => {
-    if (myMeal.is_locked || isTimeLocked) return;
+    if (myMeal.is_locked || isTimeLocked) return toast.error("System is locked right now.");
     if (preset === "full_on") setMyMeal(prev => ({ ...prev, lunch: 1, dinner: 1, breakfast: 0.5 }));
     if (preset === "full_off") setMyMeal(prev => ({ ...prev, lunch: 0, dinner: 0, breakfast: 0 }));
     if (preset === "only_lunch") setMyMeal(prev => ({ ...prev, lunch: 1, dinner: 0, breakfast: 0.5 }));
@@ -175,12 +178,12 @@ export default function MealControlPage() {
   };
 
   const adjustGuestMeal = (field: "guest_lunch" | "guest_dinner", amount: number) => {
-    if (myMeal.is_locked || isTimeLocked) return;
+    if (myMeal.is_locked || isTimeLocked) return toast.error("System is locked right now.");
     setMyMeal(prev => ({ ...prev, [field]: Math.max(0, prev[field] + amount) }));
   };
 
   const handleSaveMeal = async () => {
-    if (myMeal.is_locked || isTimeLocked) return toast.error("Time window closed or meal locked.");
+    if (myMeal.is_locked || isTimeLocked) return toast.error("Time window is closed or your meal is already locked.");
     const toastId = toast.loading("Securing meal status...");
     setActionLoading(true);
     try {
@@ -206,7 +209,7 @@ export default function MealControlPage() {
     const toastId = toast.loading("Sending Request...");
     try {
       await supabase.from("daily_meals").update({ unlock_requested: true }).eq("user_id", currentUser.id).eq("date", selectedDate);
-      toast.success("Unlock Request Sent!", { id: toastId });
+      toast.success("Unlock Request Sent to Manager!", { id: toastId });
       setMyMeal(prev => ({ ...prev, unlock_requested: true }));
     } catch (error) {
       toast.error("Request failed.", { id: toastId });
@@ -215,11 +218,13 @@ export default function MealControlPage() {
 
   const updateTimeWindow = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (userRole !== "admin" && userRole !== "super_admin") return;
-    const toastId = toast.loading("Updating Configuration...");
+    // 🔒 RESTRICTED: Only Super Admin (Main Meal Manager) can update the time window
+    if (userRole !== "super_admin") return toast.error("Only the Main Meal Manager can change system limits.");
+    
+    const toastId = toast.loading("Updating Global Configuration...");
     try {
       await supabase.from("system_settings").update({ meal_update_start: timeWindow.start + ":00", meal_update_end: timeWindow.end + ":00" }).eq("id", 1);
-      toast.success("Time window configured!", { id: toastId });
+      toast.success("Time window configured successfully!", { id: toastId });
       checkTimeLock();
     } catch (error) {
       toast.error("Update failed.", { id: toastId });
@@ -247,10 +252,10 @@ export default function MealControlPage() {
       }));
       
       if (field === 'is_locked' && value === false) {
-        toast.success("Meal Unlocked Successfully.");
+        toast.success("Meal Unlocked Successfully by Admin.");
       }
     } catch (error) {
-      toast.error("Action failed.");
+      toast.error("Admin action failed.");
     }
   };
 
@@ -278,7 +283,7 @@ export default function MealControlPage() {
           <div className="absolute inset-0 rounded-full border-4 border-indigo-100 dark:border-slate-800"></div>
           <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
         </div>
-        <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest animate-pulse">Syncing Database...</p>
+        <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest animate-pulse">Syncing Engine...</p>
       </div>
     );
   }
@@ -301,7 +306,27 @@ export default function MealControlPage() {
             </span>
           </p>
         </div>
-        <div className="w-full sm:w-auto relative group">
+        
+        {/* Strict Status Indicator */}
+        <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          {isTimeLocked ? (
+            <div className="px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <span className="text-lg">🔒</span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest">System Locked</p>
+                <p className="text-[9px] font-bold opacity-80">Outside of active hours</p>
+              </div>
+            </div>
+          ) : (
+             <div className="px-4 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-xl flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <span className="text-lg animate-pulse">🟢</span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest">System Open</p>
+                <p className="text-[9px] font-bold opacity-80">You can edit meals now</p>
+              </div>
+            </div>
+          )}
+
           <input 
             type="date" 
             value={selectedDate} 
@@ -319,11 +344,11 @@ export default function MealControlPage() {
         <div className="lg:col-span-1 space-y-6 sm:space-y-8">
           
           {/* User Meal Switch Card */}
-          <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-6 md:p-8 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl relative overflow-hidden group">
+          <div className={`bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl p-6 md:p-8 rounded-[2rem] border border-white/50 dark:border-slate-700/50 shadow-2xl relative overflow-hidden group transition-all duration-500 ${isTimeLocked ? 'opacity-90 grayscale-[10%]' : ''}`}>
             
             <div className="flex justify-between items-start mb-8">
               <div>
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Today's Selection</h3>
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Selected Date Meal</h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1.5">
                   Total Booked: <span className="text-indigo-600 dark:text-indigo-400 text-sm bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md ml-1">{myTotalToday.toFixed(1)}</span> portions
                 </p>
@@ -332,22 +357,22 @@ export default function MealControlPage() {
               <div className="flex flex-col items-end gap-1">
                 {myMeal.is_locked ? (
                   <span className="px-3 py-1.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> Locked
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> User Locked
                   </span>
                 ) : isTimeLocked ? (
-                  <span className="px-3 py-1.5 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-amber-200 dark:border-amber-500/30 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Time Over
+                  <span className="px-3 py-1.5 bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-rose-200 dark:border-rose-500/30 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Portal Closed
                   </span>
                 ) : (
                   <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase shadow-sm border border-emerald-200 dark:border-emerald-500/30 flex items-center gap-1 animate-pulse">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Open
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg> Active
                   </span>
                 )}
               </div>
             </div>
 
             {/* PRESET BUTTONS */}
-            <div className={`space-y-4 transition-opacity duration-300 ${myMeal.is_locked || isTimeLocked ? 'opacity-50 pointer-events-none grayscale-[30%]' : ''}`}>
+            <div className={`space-y-4 transition-opacity duration-300 ${myMeal.is_locked || isTimeLocked ? 'opacity-50 pointer-events-none' : ''}`}>
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <button onClick={() => applyPreset('full_on')} className={`cursor-pointer py-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:scale-95 ${myMeal.lunch > 0 && myMeal.dinner > 0 ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-500/20 shadow-md' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 text-slate-600 dark:text-slate-300'}`}>
                   <span className="text-xl mb-1.5">🟢</span>
@@ -472,29 +497,38 @@ export default function MealControlPage() {
                 </div>
               </div>
 
-              {/* Time Settings Card */}
-              <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 shadow-xl border border-white/50 dark:border-slate-700/50 flex flex-col justify-center">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              {/* Time Settings Card - ONLY FOR SUPER ADMIN (Meal Manager) */}
+              {userRole === "super_admin" ? (
+                <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 shadow-xl border border-white/50 dark:border-slate-700/50 flex flex-col justify-center">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Time Window Lock</h3>
                   </div>
-                  <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Time Window</h3>
+                  <p className="text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 font-bold mb-6">Set active hours. System will STRICTLY lock outside this time.</p>
+                  <form onSubmit={updateTimeWindow} className="space-y-5">
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Open Time</label>
+                        <input type="time" value={timeWindow.start} onChange={e => setTimeWindow({...timeWindow, start: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Close Time</label>
+                        <input type="time" value={timeWindow.end} onChange={e => setTimeWindow({...timeWindow, end: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
+                      </div>
+                    </div>
+                    <button type="submit" className="cursor-pointer w-full py-3.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95">Save Lock Config</button>
+                  </form>
                 </div>
-                <p className="text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 font-bold mb-6">Set daily allowed hours for borders to update meals.</p>
-                <form onSubmit={updateTimeWindow} className="space-y-5">
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Start Time</label>
-                      <input type="time" value={timeWindow.start} onChange={e => setTimeWindow({...timeWindow, start: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">End Time</label>
-                      <input type="time" value={timeWindow.end} onChange={e => setTimeWindow({...timeWindow, end: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer" />
-                    </div>
-                  </div>
-                  <button type="submit" className="cursor-pointer w-full py-3.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95">Save Config</button>
-                </form>
-              </div>
+              ) : (
+                // IF REGULAR ADMIN, SHOW A RESTRICTED CARD
+                <div className="bg-slate-50 dark:bg-slate-900/40 backdrop-blur-3xl rounded-[2rem] p-6 md:p-8 shadow-inner border border-slate-200/50 dark:border-slate-800/50 flex flex-col justify-center items-center text-center opacity-80">
+                  <div className="w-16 h-16 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center text-3xl mb-4">🛡️</div>
+                  <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Time Config Locked</h3>
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-2">Only the Main Meal Manager can modify the system active hours.</p>
+                </div>
+              )}
             </div>
 
             {/* Quick Admin Stats Row */}
@@ -551,7 +585,7 @@ export default function MealControlPage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Border Registry</h3>
-                    <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase">Manage daily status</p>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase">Manage daily status (Admins Override Lock)</p>
                   </div>
                 </div>
               </div>
