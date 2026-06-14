@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "./components/ThemeProvider";
 import "./globals.css";
@@ -6,9 +6,24 @@ import { Toaster } from "react-hot-toast";
 
 const inter = Inter({ subsets: ["latin"] });
 
+// 🚀 PWA Viewport: মোবাইলে অ্যাপ ওপেন করলে উপরের স্ট্যাটাস বারের কালার কেমন হবে সেটা কন্ট্রোল করে
+export const viewport: Viewport = {
+  themeColor: "#4f46e5", // Indigo color (আপনার লোগোর সাথে ম্যাচ করে)
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
+// 🎯 PWA Metadata: এটি ব্রাউজারকে সিগন্যাল দেবে "Install App" পপ-আপ দেখানোর জন্য
 export const metadata: Metadata = {
   title: "Mess Pro - Enterprise Management",
   description: "Advanced digital mess management system",
+  manifest: "/manifest.json", // 👈 এই লাইনটি সবচেয়ে জরুরি!
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Mess Pro",
+  },
 };
 
 export default function RootLayout({
@@ -28,6 +43,7 @@ export default function RootLayout({
         {children}
 
         </ThemeProvider>
+        
         {/* Premium Enterprise Toast Configuration */}
         <Toaster
           position="top-center"
