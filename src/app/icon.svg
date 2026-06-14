@@ -1,30 +1,37 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Deep Slate Background (Matches your Dashboard) -->
+  <rect width="512" height="512" rx="120" fill="#0B1120"/>
+  
+  <!-- Premium Gradient Border -->
+  <rect x="8" y="8" width="496" height="496" rx="112" stroke="url(#border-gradient)" stroke-width="16"/>
+  
+  <!-- Center Glowing Aura -->
+  <circle cx="256" cy="260" r="160" fill="url(#glow-gradient)" style="filter: blur(50px);" opacity="0.65"/>
+  
+  <!-- Modern Geometric Home Silhouette -->
+  <path d="M256 110 L80 270 H130 V410 C130 421 139 430 150 430 H210 V310 C210 298.954 218.954 290 230 290 H282 C293.046 290 302 298.954 302 310 V430 H362 C373 430 382 421 382 410 V270 H432 L256 110 Z" fill="url(#house-gradient)"/>
+  
+  <!-- Fintech/Tech Accent Dot (Represents Data/Finance) -->
+  <circle cx="256" cy="210" r="24" fill="#0B1120"/>
+
   <defs>
-    <!-- Premium Dashboard Gradient -->
-    <linearGradient id="tsh-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4f46e5" /> <!-- Indigo 600 -->
-      <stop offset="80%" stop-color="#9333ea" /> <!-- Purple 600 -->
-      <stop offset="100%" stop-color="#db2777" /> <!-- Pink 600 -->
+    <!-- Border Gradient: Indigo to Rose -->
+    <linearGradient id="border-gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#E11D48"/>
     </linearGradient>
     
-    <!-- Subtle Shadow for 3D effect -->
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.25"/>
-    </filter>
+    <!-- Glow Gradient: Amber to Rose -->
+    <linearGradient id="glow-gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#E11D48"/>
+    </linearGradient>
+    
+    <!-- House Gradient: Emerald to Teal (Represents Fresh Food & Money) -->
+    <linearGradient id="house-gradient" x1="80" y1="110" x2="432" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10B981"/>
+      <stop offset="0.5" stop-color="#06B6D4"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
   </defs>
-
-  <!-- Background App Icon Shape (Squircle) -->
-  <rect x="32" y="32" width="448" height="448" rx="110" fill="url(#tsh-gradient)" filter="url(#shadow)"/>
-
-  <!-- House Outline (Student House) -->
-  <path d="M 256 120 L 120 240 H 160 V 360 A 24 24 0 0 0 184 384 H 328 A 24 24 0 0 0 352 360 V 240 H 392 Z" 
-        fill="none" 
-        stroke="#ffffff" 
-        stroke-width="36" 
-        stroke-linecap="round" 
-        stroke-linejoin="round" />
-
-  <!-- Bold 'T' (Talukder) -->
-  <path d="M 206 200 H 306 A 16 16 0 0 1 306 232 H 272 V 304 A 16 16 0 0 1 240 304 V 232 H 206 A 16 16 0 0 1 206 200 Z" 
-        fill="#ffffff" />
 </svg>

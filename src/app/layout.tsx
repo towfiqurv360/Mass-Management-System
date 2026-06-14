@@ -8,17 +8,21 @@ const inter = Inter({ subsets: ["latin"] });
 
 // 🚀 PWA Viewport: মোবাইলে অ্যাপ ওপেন করলে উপরের স্ট্যাটাস বারের কালার কেমন হবে সেটা কন্ট্রোল করে
 export const viewport: Viewport = {
-  themeColor: "#4f46e5", // Indigo color (আপনার লোগোর সাথে ম্যাচ করে)
+  themeColor: "#4f46e5", // Indigo color
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
 };
 
-// 🎯 PWA Metadata: এটি ব্রাউজারকে সিগন্যাল দেবে "Install App" পপ-আপ দেখানোর জন্য
+// 🎯 PWA Metadata: সাদা আইকন ফিক্স এবং "Install App" পপ-আপের জন্য
 export const metadata: Metadata = {
   title: "Mess Pro - Enterprise Management",
   description: "Advanced digital mess management system",
   manifest: "/manifest.json", // 👈 এই লাইনটি সবচেয়ে জরুরি!
+  icons: {
+    icon: '/icon-192x192.png',
+    apple: '/icon-192x192.png', // 👈 এটি আইফোন এবং এন্ড্রয়েডে সাদা আইকন ফিক্স করবে
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -33,7 +37,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="antialiased" suppressHydrationWarning>
-      <body className={`${inter.className} bg-[#F8FAFC] dark:bg-[#0B1120] text-gray-900 dark:text-gray-100 transition-colors duration-300`}>
+      {/* 🚀 স্ক্রলবার ফিক্স: overflow-x-hidden এবং max-w-[100vw] যোগ করা হয়েছে */}
+      <body className={`${inter.className} bg-[#F8FAFC] dark:bg-[#0B1120] text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-x-hidden max-w-[100vw]`}>
         <ThemeProvider 
           attribute="class" 
           defaultTheme="system" 
